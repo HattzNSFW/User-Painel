@@ -19,7 +19,7 @@ const DEFAULT_PROFILE = {
   bannerHeadingVisible: true,
   bannerTitulo: "",
   bannerSubtitulo: "",
-  bannerHeight: 480,
+  bannerHeight: 355,
   avatarCrop: { x: 50, y: 50, zoom: 100 },
   bannerCrop: { x: 50, y: 50, zoom: 100 },
   cardBackgroundCrop: { x: 50, y: 50, zoom: 100 },
@@ -109,6 +109,9 @@ let bannerURL = null;
 let backgroundURL = null;
 let cardBackgroundURL = null;
 let musicURL = null;
+let directVideoURL = null;
+let currentMusicFile = null;
+let musicSourceType = "file";
 let toastTimer = null;
 
 function openDatabase() {
@@ -262,7 +265,7 @@ function loadProfile() {
     };
     profile.avatarPausado = Boolean(parsed.avatarPausado);
     profile.bannerPausado = Boolean(parsed.bannerPausado);
-    profile.bannerHeight = Number.isFinite(Number(parsed.bannerHeight)) ? Math.min(620, Math.max(240, Number(parsed.bannerHeight))) : 420;
+    profile.bannerHeight = Number.isFinite(Number(parsed.bannerHeight)) ? Math.min(620, Math.max(240, Number(parsed.bannerHeight))) : 355;
     for (const key of ["avatarCrop", "bannerCrop", "cardBackgroundCrop", "backgroundCrop"]) {
       const crop = parsed[key] || {};
       profile[key] = {
@@ -947,9 +950,12 @@ function displayBanner(file) {
 function clearBackground() {
   updateCropPreview("background", null);
   const video = $("backgroundVideo");
+  const image = $("backgroundImage");
   video.pause();
   video.removeAttribute("src");
   video.hidden = true;
+  image.hidden = true;
+  image.removeAttribute("src");
   document.body.classList.remove("has-animated-background");
 }
 
@@ -959,11 +965,18 @@ function displayBackground(file) {
   revokeURL(backgroundURL);
   backgroundURL = URL.createObjectURL(file);
 
-  const video = $("backgroundVideo");
-  prepareVideo(video);
-  video.src = backgroundURL;
-  video.hidden = false;
+  if (file.type.startsWith("video/")) {
+    const video = $("backgroundVideo");
+    prepareVideo(video);
+    video.src = backgroundURL;
+    video.hidden = false;
+  } else {
+    const image = $("backgroundImage");
+    image.src = backgroundURL;
+    image.hidden = false;
+  }
   document.body.classList.add("has-animated-background");
+  applyCropSettings();
   applyMediaPlayback();
 }
 
@@ -1003,14 +1016,14 @@ function displayCardBackground(file) {
 function applyBannerSettings() {
   const banner = document.querySelector(".banner");
   if (!banner) return;
-  const rawHeight = Math.min(620, Math.max(240, Number(profile.bannerHeight) || 480));
+  const rawHeight = Math.min(620, Math.max(240, Number(profile.bannerHeight) || 355));
   const heightValue = `${rawHeight}px`;
   banner.style.setProperty("--banner-height", heightValue);
   document.documentElement.style.setProperty("--profile-banner-height", heightValue);
 }
 
 function updateBannerRangeLabels() {
-  $("bannerHeightValue").textContent = `${profile.bannerHeight || 480} px`;
+  $("bannerHeightValue").textContent = `${profile.bannerHeight || 355} px`;
 }
 
 function applyCropSettings() {
@@ -1018,7 +1031,7 @@ function applyCropSettings() {
     avatar: [ $("avatarImage"), $("avatarVideo") ],
     banner: [ $("bannerImage"), $("bannerVideo") ],
     cardBackground: [ $("cardBackgroundImage"), $("cardBackgroundVideo") ],
-    background: [ $("backgroundVideo") ]
+    background: [ $("backgroundImage"), $("backgroundVideo") ]
   };
 
   Object.entries(targets).forEach(([key, elements]) => {
@@ -1188,11 +1201,20 @@ function setMediaAnimation(enabled) {
 }
 
 function displayMusic(file) {
+  currentMusicFile = file;
+  musicSourceType = "file";
+  const directVideo = $("directVideoAudio");
+  directVideo.pause();
+  directVideo.removeAttribute("src");
+  revokeURL(directVideoURL);
+  directVideoURL = null;
   revokeURL(musicURL);
   musicURL = URL.createObjectURL(file);
 
   $("profileAudio").src = musicURL;
   $("profileAudio").volume = profile.volume / 100;
+  $("downloadMusic").disabled = false;
+  $("downloadMusic").textContent = "Baixar arquivo original";
 
   $("musicTrackName").textContent =
     file.name.replace(/\.[^/.]+$/, "");
@@ -1202,6 +1224,12 @@ function displayMusic(file) {
 }
 
 function toggleMusic() {
+  const directVideo = $("directVideoAudio");
+  if (musicSourceType === "direct-video" && directVideo.src) {
+    if (directVideo.paused) directVideo.play().then(() => { $("musicToggle").textContent = "Ⅱ"; }).catch(() => showToast("Não foi possível reproduzir este vídeo."));
+    else { directVideo.pause(); $("musicToggle").textContent = "▶"; }
+    return;
+  }
   const audio = $("profileAudio");
 
   if (!audio.src) {
@@ -1232,6 +1260,13 @@ async function removeMusic() {
 
   $("profileAudio").pause();
   $("profileAudio").removeAttribute("src");
+  $("directVideoAudio").pause();
+  $("directVideoAudio").removeAttribute("src");
+  revokeURL(directVideoURL);
+  directVideoURL = null;
+  currentMusicFile = null;
+  musicSourceType = "file";
+  $("downloadMusic").disabled = true;
   $("profileMusic").hidden = true;
 
   revokeURL(musicURL);
@@ -1527,7 +1562,7 @@ function fillEditor() {
   $("editBadges").value = profile.insignias.join(", ");
   $("editFooter").value = profile.rodape;
   $("bannerHeadingVisible").checked = profile.bannerHeadingVisible !== false;
-  $("bannerHeight").value = profile.bannerHeight || 480;
+  $("bannerHeight").value = profile.bannerHeight || 355;
   updateBannerRangeLabels();
   applyBannerSettings();
   $("editBannerTitle").value = profile.bannerTitulo ?? "PERSONAL SPACE";
@@ -1816,8 +1851,8 @@ async function removeBanner() {
 async function uploadBackground(event) {
   const file = event.target.files?.[0];
   if (!file) return;
-  if (file.type !== "video/mp4") {
-    showToast("Escolha um vídeo MP4.");
+  if (!(file.type.startsWith("image/") || file.type === "video/mp4")) {
+    showToast("Escolha uma imagem, GIF ou vídeo MP4.");
     event.target.value = "";
     return;
   }
@@ -1825,7 +1860,7 @@ async function uploadBackground(event) {
   try {
     await saveMedia("background", file);
     displayBackground(file);
-    showToast("Fundo animado atualizado.");
+    showToast("Fundo da página atualizado.");
   } catch (error) {
     console.error(error);
     showToast("Não foi possível salvar o fundo.");
@@ -1902,6 +1937,47 @@ async function uploadMusic(event) {
   }
 
   event.target.value = "";
+}
+
+async function loadMusicVideoLink() {
+  const raw = $("musicVideoUrl").value.trim();
+  if (!raw) { showToast("Cole um link primeiro."); return; }
+  let url;
+  try { url = new URL(raw); } catch { showToast("Link inválido."); return; }
+  if (!/^https?:$/.test(url.protocol)) { showToast("Use um link HTTP ou HTTPS."); return; }
+  const host = url.hostname.toLowerCase().replace(/^www\./, "");
+  const directMp4 = /\.mp4(?:$|[?#])/i.test(url.pathname + url.search);
+  if (directMp4) {
+    try {
+      const video = $("directVideoAudio");
+      $("profileAudio").pause();
+      $("profileAudio").removeAttribute("src");
+      revokeURL(musicURL); musicURL = null;
+      video.pause(); video.src = url.href; video.volume = profile.volume / 100;
+      musicSourceType = "direct-video"; currentMusicFile = null;
+      $("downloadMusic").disabled = true;
+      $("musicTrackName").textContent = "Áudio de vídeo MP4";
+      $("profileMusic").hidden = false;
+      await video.play();
+      $("musicToggle").textContent = "Ⅱ";
+      showToast("Reproduzindo o áudio do MP4.");
+    } catch (error) { console.error(error); showToast("Não foi possível reproduzir o MP4. Verifique se o link é público e permite acesso direto."); }
+    return;
+  }
+  const supported = host === "youtube.com" || host === "m.youtube.com" || host === "youtu.be" || host === "tiktok.com" || host === "instagram.com";
+  if (!supported) { showToast("Use YouTube, TikTok, Instagram ou um link direto de arquivo MP4."); return; }
+  showToast("Link reconhecido. Para tocar apenas o áudio dessas plataformas é necessário um serviço externo/backend; o navegador não consegue extrair a faixa de áudio com segurança. Por enquanto, abra o link na própria plataforma.");
+  window.open(url.href, "_blank", "noopener,noreferrer");
+}
+
+function downloadOriginalMusic() {
+  if (!currentMusicFile || musicSourceType !== "file") { showToast("O download está disponível para arquivos enviados."); return; }
+  const url = URL.createObjectURL(currentMusicFile);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = currentMusicFile.name || "musica";
+  document.body.appendChild(anchor); anchor.click(); anchor.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1500);
 }
 
 function blobToDataURL(blob) {
@@ -2143,12 +2219,16 @@ function setupEvents() {
 
   $("musicToggle").addEventListener("click", toggleMusic);
   $("previewMusic").addEventListener("click", toggleMusic);
+  $("downloadMusic").addEventListener("click", downloadOriginalMusic);
+  $("loadMusicVideo").addEventListener("click", loadMusicVideoLink);
+  $("musicVideoUrl").addEventListener("keydown", (event) => { if (event.key === "Enter") loadMusicVideoLink(); });
 
   $("musicVolume").addEventListener("input", (event) => {
     const value = Number(event.target.value);
 
     $("musicVolumeValue").textContent = `${value}%`;
     $("profileAudio").volume = value / 100;
+    $("directVideoAudio").volume = value / 100;
   });
 
   $("saveTheme").addEventListener("click", saveCurrentTheme);

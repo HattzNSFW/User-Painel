@@ -10,11 +10,12 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;500;600;700&family=Cormorant+Garamond:wght@400;500;600;700&family=DM+Sans:wght@400;500;600;700&family=Lora:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&family=Montserrat:wght@400;500;600;700&family=Playfair+Display:wght@500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
 
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="style-candidato.css">
 </head>
 
 <body>
   <div class="site-background" aria-hidden="true">
+    <img id="backgroundImage" alt="" hidden>
     <video id="backgroundVideo" autoplay muted loop playsinline hidden></video>
     <div class="site-background-overlay"></div>
   </div>
@@ -291,8 +292,8 @@
             </label>
             <div class="banner-adjustments">
               <div class="range-field">
-                <div class="range-heading"><label for="bannerHeight">Altura da área visível</label><output id="bannerHeightValue">480 px</output></div>
-                <input class="range-input" type="range" id="bannerHeight" min="240" max="620" step="5" value="480">
+                <div class="range-heading"><label for="bannerHeight">Altura da área visível</label><output id="bannerHeightValue">355 px</output></div>
+                <input class="range-input" type="range" id="bannerHeight" min="240" max="620" step="5" value="355">
               </div>
             </div>
           </div>
@@ -343,9 +344,9 @@
             <label>Fundo da página</label>
             <label class="upload-box" for="backgroundUpload">
               <span class="upload-symbol">＋</span>
-              <span><strong>Escolher vídeo para a página</strong></span>
+              <span><strong>Escolher imagem, GIF ou vídeo para a página</strong></span>
             </label>
-            <input type="file" id="backgroundUpload" accept="video/mp4" hidden>
+            <input type="file" id="backgroundUpload" accept="image/*,video/mp4" hidden>
             <div class="crop-editor" data-crop="background">
               <div class="crop-editor-heading">
                 <strong>Enquadramento</strong>
@@ -436,10 +437,16 @@
               <span><strong>Selecionar música</strong></span>
             </label>
             <input type="file" id="musicUpload" accept="audio/*" hidden>
+            <div class="field-hint">Você também pode colar um link de vídeo. Links MP4 diretos podem tocar somente o áudio; links de YouTube, TikTok e Instagram abrem o player oficial, pois essas plataformas não permitem extração de áudio apenas pelo navegador.</div>
+            <label class="range-label" for="musicVideoUrl">Link de vídeo</label>
+            <input class="text-input" type="url" id="musicVideoUrl" placeholder="YouTube, TikTok, Instagram ou MP4 direto" autocomplete="url">
+            <button class="text-button" type="button" id="loadMusicVideo">Usar link</button>
             <div class="music-actions">
               <button class="text-button" id="previewMusic">Reproduzir / pausar</button>
+              <button class="text-button" id="downloadMusic" type="button" disabled>Baixar arquivo original</button>
               <button class="text-button danger" id="removeMusic">Remover música</button>
             </div>
+            <video id="directVideoAudio" playsinline hidden></video>
             <label class="range-label" for="musicVolume">
               Volume <span id="musicVolumeValue">12%</span>
             </label>
@@ -690,6 +697,6 @@
     </section>
   </div>
 
-  <script src="script.js"></script>
+  <script src="script-candidato.js"></script>
 </body>
 </html>

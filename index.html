@@ -1,0 +1,695 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#0b0a10">
+  <title>Hättz — Personal Space</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;500;600;700&family=Cormorant+Garamond:wght@400;500;600;700&family=DM+Sans:wght@400;500;600;700&family=Lora:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&family=Montserrat:wght@400;500;600;700&family=Playfair+Display:wght@500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+  <div class="site-background" aria-hidden="true">
+    <video id="backgroundVideo" autoplay muted loop playsinline hidden></video>
+    <div class="site-background-overlay"></div>
+  </div>
+  <main class="page">
+    <section class="profile-card">
+      <div class="card-background" aria-hidden="true">
+        <img id="cardBackgroundImage" alt="" hidden>
+        <video id="cardBackgroundVideo" autoplay muted loop playsinline hidden></video>
+        <div class="card-background-overlay"></div>
+      </div>
+
+      <header class="banner">
+        <img id="bannerImage" class="banner-media" alt="" hidden>
+        <video id="bannerVideo" class="banner-media" autoplay muted loop playsinline hidden></video>
+        <div class="banner-overlay"></div>
+
+        <div class="banner-actions">
+          <div class="banner-heading" id="bannerHeading">
+            <span class="banner-title" id="bannerTitle"></span>
+            <span class="banner-subtitle" id="bannerSubtitle" hidden></span>
+          </div>
+          <button class="icon-button" id="openEditor" aria-label="Editar perfil" title="Personalizar perfil">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M12 20h9"></path>
+              <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 4 1-4Z"></path>
+            </svg>
+          </button>
+        </div>
+      </header>
+
+      <div class="profile-content">
+
+        <section class="identity-section">
+          <div class="avatar-area">
+            <div class="avatar-frame" id="avatarFrame" aria-hidden="true"></div>
+
+            <div class="avatar-photo">
+              <img id="avatarImage" alt="Avatar" hidden>
+              <video id="avatarVideo" autoplay muted loop playsinline hidden></video>
+              <div class="avatar-placeholder" id="avatarPlaceholder">
+                <span>✦</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="identity-info">
+            <div class="name-line">
+              <h1 id="profileName">Seu Nome</h1>
+
+              <span class="verified-badge" id="verifiedBadge" title="Perfil verificado" aria-label="Perfil verificado" hidden>
+                <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                  <path class="verified-seal" d="M12 1.6 14.25 3l2.62-.48 1.35 2.3 2.55.8.1 2.66 1.73 2.02-1.17 2.4.62 2.6-2.25 1.42-.98 2.47-2.65-.05L12 20.7l-2.17-1.56-2.65.05-.98-2.47-2.25-1.42.62-2.6-1.17-2.4 1.73-2.02.1-2.66 2.55-.8 1.35-2.3L11.75 3 12 1.6Z" />
+                  <path class="verified-check" d="m8.1 11.9 2.55 2.55 5.35-5.4" />
+                </svg>
+              </span>
+            </div>
+
+            <div class="profile-meta"><p class="username" id="profileUsername">@seuusuario</p><span class="role-chip" id="profileRole" hidden></span></div>
+            <p class="bio" id="profileBio">Sua identidade, do seu jeito.</p>
+            <div class="badges" id="badges"></div>
+          </div>
+        </section>
+
+        <section class="content-section" id="statsSection">
+          <div class="section-heading">
+            <div>
+              <h2 id="statsSectionTitle">Em evidência</h2>
+              <p class="section-description" id="statsSectionDescription"></p>
+            </div>
+          </div>
+
+          <div class="stats-grid" id="statsGrid"></div>
+        </section>
+
+        <div class="profile-divider divider-ornamental" id="profileDivider" aria-hidden="true"><span>✦</span></div>
+
+        <section class="content-section" id="detailsSection">
+          <div class="section-heading">
+            <div>
+              <h2 id="detailsSectionTitle">Um pouco sobre mim</h2>
+              <p class="section-description" id="detailsSectionDescription"></p>
+            </div>
+          </div>
+
+          <div class="details-grid" id="detailsGrid"></div>
+        </section>
+
+        <section class="music-player" id="profileMusic" hidden>
+          <div class="music-cover">♫</div>
+          <div class="music-info">
+            <span class="music-caption">TOCANDO NO PERFIL</span>
+            <strong id="musicTrackName">Minha música</strong>
+          </div>
+          <button class="music-play" id="musicToggle" aria-label="Reproduzir ou pausar">▶</button>
+          <audio id="profileAudio" loop></audio>
+        </section>
+
+        <footer class="profile-footer">
+          <span id="footerText"></span>
+          <span class="footer-signature">DESIGNED BY HÄTTZ <i>✦</i></span>
+        </footer>
+      </div>
+    </section>
+
+    <p class="page-caption">Um espaço pessoal. Uma identidade única.</p>
+  </main>
+
+  <div class="toast" id="toast"></div>
+
+  <div class="modal-backdrop" id="editorModal" aria-hidden="true">
+    <section class="editor-modal" role="dialog" aria-modal="true" aria-labelledby="editorTitle">
+
+      <header class="modal-header">
+        <div>
+          <h2 id="editorTitle">Editar espaço</h2>
+          <span class="owner-mark" title="Proprietário do perfil">OWNER · HÄTTZ</span>
+        </div>
+        <button class="close-button" id="closeEditor" aria-label="Fechar">×</button>
+      </header>
+
+      <nav class="editor-tabs">
+        <button class="tab-button active" data-tab="identity">Perfil</button>
+        <button class="tab-button" data-tab="media">Mídia</button>
+        <button class="tab-button" data-tab="design">Design</button>
+        <button class="tab-button" data-tab="content">Conteúdo</button>
+      </nav>
+
+      <div class="modal-body">
+
+        <section class="tab-panel active" id="tab-identity">
+          <div class="field-group">
+            <label for="editName">Nome</label>
+            <input class="text-input" id="editName" maxlength="45" placeholder="Seu nome">
+          </div>
+          <div class="field-group banner-heading-editor">
+            <label>Texto do banner</label>
+            <label class="switch-row">
+              <span>
+                <strong>Mostrar texto no banner</strong>
+              </span>
+              <input type="checkbox" id="bannerHeadingVisible">
+              <span class="switch"></span>
+            </label>
+            <label for="editBannerTitle">Título</label>
+            <input class="text-input" id="editBannerTitle" maxlength="42" placeholder="Título do banner">
+            <label for="editBannerSubtitle">Subtítulo</label>
+            <input class="text-input" id="editBannerSubtitle" maxlength="90" placeholder="Ex.: Uma identidade única">
+          </div>
+
+          <div class="field-group">
+            <label for="editUsername">Usuário</label>
+            <input class="text-input" id="editUsername" maxlength="30" placeholder="seuusuario">
+          </div>
+
+          <div class="field-group">
+            <label for="editRole">Cargo do perfil</label>
+            <select class="text-input" id="editRole">
+              <option value="">Sem identificação</option>
+              <option value="Membro">Membro</option>
+              <option value="Artista">Artista</option>
+              <option value="Designer">Designer</option>
+              <option value="VIP">VIP</option>
+            </select>
+            <small class="field-hint">Owner · Hättz é uma identificação reservada e não pode ser atribuída a perfis comuns.</small>
+          </div>
+
+          <div class="field-group">
+            <label for="editBio">Descrição</label>
+            <textarea class="text-input" id="editBio" rows="3" maxlength="180" placeholder="Escreva uma descrição..."></textarea>
+          </div>
+
+          <label class="switch-row">
+            <span>
+              <strong>Selo de verificação</strong>
+            </span>
+            <input type="checkbox" id="editVerified">
+            <span class="switch"></span>
+          </label>
+
+          <div class="field-group">
+            <label for="editBadges">Tags personalizadas</label>
+            <input class="text-input" id="editBadges" placeholder="Ex.: Criador, Fotografia, Música, Tecnologia">
+            <div class="badge-library" id="badgeLibrary" aria-label="Biblioteca de insígnias"></div>
+          </div>
+
+          <div class="field-group">
+            <label for="editFooter">Texto do rodapé</label>
+            <input class="text-input" id="editFooter" maxlength="90" placeholder="Opcional">
+          </div>
+        </section>
+
+        <section class="tab-panel" id="tab-media">
+          <div class="field-group">
+            <label>Avatar</label>
+            <label class="upload-box" for="avatarUpload">
+              <span class="upload-symbol">＋</span>
+              <span><strong>Escolher foto ou vídeo</strong></span>
+            </label>
+            <input type="file" id="avatarUpload" accept="image/*,video/mp4" hidden>
+            <div class="crop-editor" data-crop="avatar">
+              <div class="crop-editor-heading">
+                <strong>Enquadramento</strong>
+                <span>A moldura clara marca exatamente o recorte que aparecerá no perfil</span>
+              </div>
+              <div class="crop-preview crop-preview-avatar">
+                <img id="avatarCropPreview" alt="Prévia do enquadramento de avatar" hidden>
+                <video id="avatarCropPreviewVideo" muted playsinline loop hidden></video>
+                <div class="crop-preview-empty" id="avatarCropEmpty">Adicione uma mídia para ajustar</div>
+                <div class="crop-safe-window"></div>
+              </div>
+              <div class="crop-controls">
+                <label class="range-field">
+                  <span class="range-heading"><span>Horizontal</span><output id="avatarCropXValue">50%</output></span>
+                  <input class="range-input crop-range" type="range" id="avatarCropX" min="0" max="100" value="50">
+                </label>
+                <label class="range-field">
+                  <span class="range-heading"><span>Vertical</span><output id="avatarCropYValue">50%</output></span>
+                  <input class="range-input crop-range" type="range" id="avatarCropY" min="0" max="100" value="50">
+                </label>
+                <label class="range-field">
+                  <span class="range-heading"><span>Zoom</span><output id="avatarCropZoomValue">100%</output></span>
+                  <input class="range-input crop-range" type="range" id="avatarCropZoom" min="100" max="250" step="1" value="100">
+                </label>
+              </div>
+              <button class="text-button crop-reset" type="button" data-crop-reset="avatar">Centralizar enquadramento</button>
+            </div>
+            <button class="text-button danger" id="removeAvatar">Remover avatar</button>
+            <label class="switch-row">
+              <span><strong>Pausar vídeo do avatar</strong></span>
+              <input type="checkbox" id="pauseAvatar">
+              <span class="switch"></span>
+            </label>
+          </div>
+
+          <div class="field-group">
+            <label>Banner</label>
+            <label class="upload-box" for="bannerUpload">
+              <span class="upload-symbol">＋</span>
+              <span><strong>Escolher banner</strong></span>
+            </label>
+            <input type="file" id="bannerUpload" accept="image/*,video/mp4" hidden>
+            <div class="crop-editor" data-crop="banner">
+              <div class="crop-editor-heading">
+                <strong>Enquadramento</strong>
+                <span>A moldura clara marca exatamente o recorte que aparecerá no perfil</span>
+              </div>
+              <div class="crop-preview crop-preview-banner">
+                <img id="bannerCropPreview" alt="Prévia do enquadramento de banner" hidden>
+                <video id="bannerCropPreviewVideo" muted playsinline loop hidden></video>
+                <div class="crop-preview-empty" id="bannerCropEmpty">Adicione uma mídia para ajustar</div>
+                <div class="crop-safe-window"></div>
+              </div>
+              <div class="crop-controls">
+                <label class="range-field">
+                  <span class="range-heading"><span>Horizontal</span><output id="bannerCropXValue">50%</output></span>
+                  <input class="range-input crop-range" type="range" id="bannerCropX" min="0" max="100" value="50">
+                </label>
+                <label class="range-field">
+                  <span class="range-heading"><span>Vertical</span><output id="bannerCropYValue">50%</output></span>
+                  <input class="range-input crop-range" type="range" id="bannerCropY" min="0" max="100" value="50">
+                </label>
+                <label class="range-field">
+                  <span class="range-heading"><span>Zoom</span><output id="bannerCropZoomValue">100%</output></span>
+                  <input class="range-input crop-range" type="range" id="bannerCropZoom" min="100" max="250" step="1" value="100">
+                </label>
+              </div>
+              <button class="text-button crop-reset" type="button" data-crop-reset="banner">Centralizar enquadramento</button>
+            </div>
+            <button class="text-button danger" id="removeBanner">Remover banner</button>
+            <label class="switch-row">
+              <span><strong>Pausar banner</strong></span>
+              <input type="checkbox" id="pauseBanner">
+              <span class="switch"></span>
+            </label>
+            <div class="banner-adjustments">
+              <div class="range-field">
+                <div class="range-heading"><label for="bannerHeight">Altura da área visível</label><output id="bannerHeightValue">480 px</output></div>
+                <input class="range-input" type="range" id="bannerHeight" min="240" max="620" step="5" value="480">
+              </div>
+            </div>
+          </div>
+
+          <div class="field-group">
+            <label>Fundo do cartão de perfil</label>
+            <label class="upload-box" for="cardBackgroundUpload">
+              <span class="upload-symbol">＋</span>
+              <span><strong>Escolher imagem ou vídeo</strong></span>
+            </label>
+            <input type="file" id="cardBackgroundUpload" accept="image/*,video/mp4" hidden>
+            <div class="crop-editor" data-crop="cardBackground">
+              <div class="crop-editor-heading">
+                <strong>Enquadramento</strong>
+                <span>A moldura clara marca exatamente o recorte que aparecerá no perfil</span>
+              </div>
+              <div class="crop-preview crop-preview-cardBackground">
+                <img id="cardBackgroundCropPreview" alt="Prévia do enquadramento de fundo do cartão" hidden>
+                <video id="cardBackgroundCropPreviewVideo" muted playsinline loop hidden></video>
+                <div class="crop-preview-empty" id="cardBackgroundCropEmpty">Adicione uma mídia para ajustar</div>
+                <div class="crop-safe-window"></div>
+              </div>
+              <div class="crop-controls">
+                <label class="range-field">
+                  <span class="range-heading"><span>Horizontal</span><output id="cardBackgroundCropXValue">50%</output></span>
+                  <input class="range-input crop-range" type="range" id="cardBackgroundCropX" min="0" max="100" value="50">
+                </label>
+                <label class="range-field">
+                  <span class="range-heading"><span>Vertical</span><output id="cardBackgroundCropYValue">50%</output></span>
+                  <input class="range-input crop-range" type="range" id="cardBackgroundCropY" min="0" max="100" value="50">
+                </label>
+                <label class="range-field">
+                  <span class="range-heading"><span>Zoom</span><output id="cardBackgroundCropZoomValue">100%</output></span>
+                  <input class="range-input crop-range" type="range" id="cardBackgroundCropZoom" min="100" max="250" step="1" value="100">
+                </label>
+              </div>
+              <button class="text-button crop-reset" type="button" data-crop-reset="cardBackground">Centralizar enquadramento</button>
+            </div>
+            <button class="text-button danger" id="removeCardBackground">Remover fundo do cartão</button>
+            <label class="switch-row">
+              <span><strong>Pausar fundo do cartão</strong></span>
+              <input type="checkbox" id="pauseCardBackground">
+              <span class="switch"></span>
+            </label>
+          </div>
+
+          <div class="field-group">
+            <label>Fundo da página</label>
+            <label class="upload-box" for="backgroundUpload">
+              <span class="upload-symbol">＋</span>
+              <span><strong>Escolher vídeo para a página</strong></span>
+            </label>
+            <input type="file" id="backgroundUpload" accept="video/mp4" hidden>
+            <div class="crop-editor" data-crop="background">
+              <div class="crop-editor-heading">
+                <strong>Enquadramento</strong>
+                <span>A moldura clara marca exatamente o recorte que aparecerá no perfil</span>
+              </div>
+              <div class="crop-preview crop-preview-background">
+                <img id="backgroundCropPreview" alt="Prévia do enquadramento de fundo da página" hidden>
+                <video id="backgroundCropPreviewVideo" muted playsinline loop hidden></video>
+                <div class="crop-preview-empty" id="backgroundCropEmpty">Adicione uma mídia para ajustar</div>
+                <div class="crop-safe-window"></div>
+              </div>
+              <div class="crop-controls">
+                <label class="range-field">
+                  <span class="range-heading"><span>Horizontal</span><output id="backgroundCropXValue">50%</output></span>
+                  <input class="range-input crop-range" type="range" id="backgroundCropX" min="0" max="100" value="50">
+                </label>
+                <label class="range-field">
+                  <span class="range-heading"><span>Vertical</span><output id="backgroundCropYValue">50%</output></span>
+                  <input class="range-input crop-range" type="range" id="backgroundCropY" min="0" max="100" value="50">
+                </label>
+                <label class="range-field">
+                  <span class="range-heading"><span>Zoom</span><output id="backgroundCropZoomValue">100%</output></span>
+                  <input class="range-input crop-range" type="range" id="backgroundCropZoom" min="100" max="250" step="1" value="100">
+                </label>
+              </div>
+              <button class="text-button crop-reset" type="button" data-crop-reset="background">Centralizar enquadramento</button>
+            </div>
+            <button class="text-button danger" id="removeBackground">Remover fundo animado</button>
+            <label class="switch-row">
+              <span><strong>Pausar fundo da página</strong></span>
+              <input type="checkbox" id="pauseBackground">
+              <span class="switch"></span>
+            </label>
+          </div>
+
+          <label class="switch-row">
+            <span>
+              <strong>Reproduzir animações</strong>
+            </span>
+            <input type="checkbox" id="animateMedia" checked>
+            <span class="switch"></span>
+          </label>
+
+          <div class="field-group">
+            <label for="avatarFrameSelect">Estilo da moldura</label>
+            <select class="text-input" id="avatarFrameSelect">
+              <option value="none">Sem moldura</option>
+              <optgroup label="Clássicas e ornamentais">
+                <option value="celestial">Celestial</option>
+                <option value="gothic">Gótica</option>
+                <option value="royal">Real</option>
+                <option value="floral">Floral</option>
+                <option value="ornate">Ornamental</option>
+                <option value="dark">Dark</option>
+                <option value="halo">Halo</option>
+                <option value="vintage">Vintage</option>
+              </optgroup>
+            </select>
+            <label for="frameRarity" class="sub-field-label">Raridade visual</label>
+            <select class="text-input" id="frameRarity">
+              <option value="none">Sem raridade</option>
+              <option value="common">Common</option>
+              <option value="rare">Rare</option>
+              <option value="epic">Epic</option>
+              <option value="legendary">Legendary</option>
+            </select>
+            <label class="switch-row frame-color-toggle">
+              <span><strong>Cor personalizada</strong></span>
+              <input type="checkbox" id="customFrameColorEnabled">
+              <span class="switch"></span>
+            </label>
+            <label class="frame-color-picker" for="customFrameColor">
+              <span>Escolher cor da moldura</span>
+              <input type="color" id="customFrameColor" value="#a78bfa">
+            </label>
+          </div>
+
+          <label class="switch-row">
+            <span><strong>Efeitos de perfil</strong></span>
+            <input type="checkbox" id="profileEffects" checked>
+            <span class="switch"></span>
+          </label>
+
+          <div class="field-group">
+            <label>Música do perfil</label>
+            <label class="upload-box" for="musicUpload">
+              <span class="upload-symbol">♫</span>
+              <span><strong>Selecionar música</strong></span>
+            </label>
+            <input type="file" id="musicUpload" accept="audio/*" hidden>
+            <div class="music-actions">
+              <button class="text-button" id="previewMusic">Reproduzir / pausar</button>
+              <button class="text-button danger" id="removeMusic">Remover música</button>
+            </div>
+            <label class="range-label" for="musicVolume">
+              Volume <span id="musicVolumeValue">12%</span>
+            </label>
+            <input type="range" id="musicVolume" min="0" max="35" value="12">
+          </div>
+        </section>
+
+        <section class="tab-panel" id="tab-design">
+          <div class="field-group">
+            <label>Temas prontos</label>
+            <div class="theme-grid">
+              <button class="theme-option" data-theme="dark" type="button">
+                <span class="theme-swatch" style="--swatch-bg:#0b0a10;--swatch-grad:#292333;--swatch-accent:#a78bfa"></span>
+                <span>Obsidian</span>
+              </button>
+              <button class="theme-option" data-theme="midnight" type="button">
+                <span class="theme-swatch" style="--swatch-bg:#080e19;--swatch-grad:#1b3150;--swatch-accent:#75b8f5"></span>
+                <span>Midnight</span>
+              </button>
+              <button class="theme-option" data-theme="purple" type="button">
+                <span class="theme-swatch" style="--swatch-bg:#100b18;--swatch-grad:#49345e;--swatch-accent:#c19bfa"></span>
+                <span>Lavender</span>
+              </button>
+              <button class="theme-option" data-theme="gold" type="button">
+                <span class="theme-swatch" style="--swatch-bg:#100d09;--swatch-grad:#59432b;--swatch-accent:#d6ae68"></span>
+                <span>Royal</span>
+              </button>
+              <button class="theme-option" data-theme="crimson" type="button">
+                <span class="theme-swatch" style="--swatch-bg:#16090e;--swatch-grad:#542033;--swatch-accent:#ef7899"></span>
+                <span>Crimson</span>
+              </button>
+              <button class="theme-option" data-theme="ocean" type="button">
+                <span class="theme-swatch" style="--swatch-bg:#061217;--swatch-grad:#164653;--swatch-accent:#54d6d0"></span>
+                <span>Abyss</span>
+              </button>
+              <button class="theme-option" data-theme="forest" type="button">
+                <span class="theme-swatch" style="--swatch-bg:#09130f;--swatch-grad:#244c39;--swatch-accent:#8bd6a4"></span>
+                <span>Evergreen</span>
+              </button>
+              <button class="theme-option" data-theme="ice" type="button">
+                <span class="theme-swatch" style="--swatch-bg:#0b121b;--swatch-grad:#2b4964;--swatch-accent:#9bd8ff"></span>
+                <span>Glacier</span>
+              </button>
+              <button class="theme-option" data-theme="rose" type="button">
+                <span class="theme-swatch" style="--swatch-bg:#170d14;--swatch-grad:#593044;--swatch-accent:#f0a3c7"></span>
+                <span>Rosewood</span>
+              </button>
+              <button class="theme-option" data-theme="ember" type="button">
+                <span class="theme-swatch" style="--swatch-bg:#17100b;--swatch-grad:#654027;--swatch-accent:#f3a45f"></span>
+                <span>Ember</span>
+              </button>
+              <button class="theme-option" data-theme="mono" type="button">
+                <span class="theme-swatch" style="--swatch-bg:#101010;--swatch-grad:#353535;--swatch-accent:#e5e5e5"></span>
+                <span>Monochrome</span>
+              </button>
+              <button class="theme-option" data-theme="cyber" type="button">
+                <span class="theme-swatch" style="--swatch-bg:#080b14;--swatch-grad:#202c4d;--swatch-accent:#68f0d2"></span>
+                <span>Neon Circuit</span>
+              </button>
+              <button class="theme-option" data-theme="wine" type="button">
+                <span class="theme-swatch" style="--swatch-bg:#160a12;--swatch-grad:#4d1d34;--swatch-accent:#d88ab2"></span>
+                <span>Bordeaux</span>
+              </button>
+              <button class="theme-option" data-theme="sand" type="button">
+                <span class="theme-swatch" style="--swatch-bg:#17130e;--swatch-grad:#594a35;--swatch-accent:#d9bd86"></span>
+                <span>Desert</span>
+              </button>
+              <button class="theme-option" data-theme="amethyst" type="button">
+                <span class="theme-swatch" style="--swatch-bg:#100b19;--swatch-grad:#382451;--swatch-accent:#ad8cff"></span>
+                <span>Amethyst</span>
+              </button>
+              <button class="theme-option" data-theme="steel" type="button">
+                <span class="theme-swatch" style="--swatch-bg:#0b1017;--swatch-grad:#303e50;--swatch-accent:#9eb8d6"></span>
+                <span>Graphite Blue</span>
+              </button>
+              <button class="theme-option" data-theme="obsidianRose" type="button">
+                <span class="theme-swatch" style="--swatch-bg:#120b10;--swatch-grad:#432331;--swatch-accent:#e6a0bd"></span>
+                <span>Obsidian Rose</span>
+              </button>
+              <button class="theme-option" data-theme="silver" type="button">
+                <span class="theme-swatch" style="--swatch-bg:#101216;--swatch-grad:#39404a;--swatch-accent:#c7d0dc"></span>
+                <span>Silver</span>
+              </button>
+              <button class="theme-option" data-theme="violetNight" type="button">
+                <span class="theme-swatch" style="--swatch-bg:#0d0917;--swatch-grad:#30204d;--swatch-accent:#b79cff"></span>
+                <span>Violet Night</span>
+              </button>
+              <button class="theme-option" data-theme="arctic" type="button">
+                <span class="theme-swatch" style="--swatch-bg:#07131a;--swatch-grad:#1b3b4c;--swatch-accent:#8de0ef"></span>
+                <span>Arctic</span>
+              </button>
+              <button class="theme-option" data-theme="bloodMoon" type="button">
+                <span class="theme-swatch" style="--swatch-bg:#15090b;--swatch-grad:#4c1b22;--swatch-accent:#e36d79"></span>
+                <span>Blood Moon</span>
+              </button>
+              <button class="theme-option" data-theme="sage" type="button">
+                <span class="theme-swatch" style="--swatch-bg:#0c120f;--swatch-grad:#2d4437;--swatch-accent:#a7c7a8"></span>
+                <span>Sage</span>
+              </button>
+              <button class="theme-option" data-theme="bronze" type="button">
+                <span class="theme-swatch" style="--swatch-bg:#15100b;--swatch-grad:#57402b;--swatch-accent:#d5a76b"></span>
+                <span>Bronze</span>
+              </button>
+              <button class="theme-option" data-theme="ultramarine" type="button">
+                <span class="theme-swatch" style="--swatch-bg:#080d1b;--swatch-grad:#202e5a;--swatch-accent:#8daaff"></span>
+                <span>Ultramarine</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="field-group theme-library-group">
+            <label for="savedThemeSelect">Minha biblioteca de temas</label>
+            <div class="theme-save-row">
+              <input class="text-input" id="savedThemeName" maxlength="24" placeholder="Nome do tema">
+              <button class="text-button" id="saveTheme">Salvar tema</button>
+            </div>
+            <div class="theme-save-row">
+              <select class="text-input" id="savedThemeSelect"><option value="">Selecionar tema salvo</option></select>
+              <button class="text-button" id="applySavedTheme">Aplicar</button>
+              <button class="text-button danger" id="deleteSavedTheme">Excluir</button>
+            </div>
+          </div>
+
+          <div class="field-group">
+            <label>Personalizar cores</label>
+            <div class="color-grid">
+              <label>Fundo <input type="color" id="colorBackground"></label>
+              <label>Gradiente <input type="color" id="colorGradient"></label>
+              <label>Cards <input type="color" id="colorCard"></label>
+              <label>Destaque <input type="color" id="colorAccent"></label>
+              <label>Texto <input type="color" id="colorText"></label>
+              <label>Bordas <input type="color" id="colorBorder"></label>
+            </div>
+            <div class="design-extra-grid">
+              <label>Intensidade do gradiente <input type="range" id="gradientIntensity" min="0" max="100" value="55"></label>
+              <label>Arredondamento dos cards <input type="range" id="cardRadius" min="8" max="32" value="18"></label>
+            </div>
+            <button class="primary-button full-button" id="applyCustomTheme">Aplicar cores</button>
+          </div>
+
+          <div class="field-group divider-settings">
+            <label>Divisória entre seções</label>
+            <select class="text-input" id="dividerStyle">
+              <option value="none">Sem divisória</option>
+              <option value="minimal">Minimalista</option>
+              <option value="double">Linha dupla</option>
+              <option value="dotted">Pontilhada</option>
+              <option value="ornamental">Ornamental</option>
+              <option value="celestial">Celestial</option>
+              <option value="gothic">Gótica</option>
+              <option value="royal">Real</option>
+            </select>
+            <label class="switch-row">
+              <span><strong>Personalizar cor da divisória</strong></span>
+              <input type="checkbox" id="dividerCustomColorEnabled">
+              <span class="switch"></span>
+            </label>
+            <label class="frame-color-picker" for="dividerColor">
+              <span>Cor da linha</span>
+              <input type="color" id="dividerColor" value="#a78bfa">
+            </label>
+          </div>
+
+          <div class="field-group">
+            <label for="fontFamily">Tipografia</label>
+            <select class="text-input" id="fontFamily">
+              <option value="DM Sans">DM Sans</option>
+              <option value="Arial">Arial</option>
+              <option value="Georgia">Georgia</option>
+              <option value="Playfair Display">Playfair Display</option>
+              <option value="Trebuchet MS">Trebuchet MS</option>
+              <option value="Verdana">Verdana</option>
+              <option value="Manrope">Manrope</option>
+              <option value="Montserrat">Montserrat</option>
+              <option value="Space Grotesk">Space Grotesk</option>
+              <option value="Lora">Lora</option>
+              <option value="Cormorant Garamond">Cormorant Garamond</option>
+              <option value="Cinzel">Cinzel</option>
+            </select>
+          </div>
+        </section>
+
+        <section class="tab-panel" id="tab-content">
+          <div class="field-group section-config">
+            <label>Apresentação das seções</label>
+            <div class="section-config-grid">
+              <div class="field-group">
+                <label for="editStatsTitle">Título da primeira seção</label>
+                <input class="text-input" id="editStatsTitle" maxlength="28" placeholder="Em evidência">
+                <label for="editStatsSubtitle">Subtítulo</label>
+                <input class="text-input" id="editStatsSubtitle" maxlength="70" placeholder="Subtítulo (opcional)">
+              </div>
+              <div class="field-group">
+                <label for="editDetailsTitle">Título da segunda seção</label>
+                <input class="text-input" id="editDetailsTitle" maxlength="28" placeholder="Um pouco sobre mim">
+                <label for="editDetailsSubtitle">Subtítulo</label>
+                <input class="text-input" id="editDetailsSubtitle" maxlength="70" placeholder="Subtítulo (opcional)">
+              </div>
+            </div>
+          </div>
+
+          <div class="editor-section-title">
+            <div>
+              <h3>Itens em evidência</h3>
+            </div>
+            <button class="add-button" id="addStat">＋ Adicionar item</button>
+          </div>
+
+          <datalist id="statPresets">
+            <option value="Em foco"></option><option value="Atividade"></option>
+            <option value="Interesse"></option><option value="Personalizado"></option>
+          </datalist>
+          <div class="dynamic-editor" id="statsEditor"></div>
+
+          <div class="editor-separator"></div>
+
+          <div class="editor-section-title">
+            <div>
+              <h3>Informações do perfil</h3>
+            </div>
+            <button class="add-button" id="addDetail">＋ Adicionar detalhe</button>
+          </div>
+
+          <datalist id="detailPresets">
+            <option value="Informação"></option><option value="Preferência"></option>
+            <option value="Referência"></option><option value="Link"></option>
+            <option value="Personalizado"></option>
+          </datalist>
+          <div class="dynamic-editor" id="detailsEditor"></div>
+
+          <p class="editor-footnote">
+            Você pode deixar os valores vazios. Os títulos continuam aparecendo no perfil.
+          </p>
+        </section>
+      </div>
+
+      <footer class="modal-footer">
+        <div class="backup-actions">
+          <button class="text-button" id="exportProfile">Exportar backup</button>
+          <button class="text-button" id="importProfile">Importar backup</button>
+          <input type="file" id="importProfileFile" accept="application/json,.json" hidden>
+        </div>
+        <div class="modal-main-actions">
+          <button class="text-button danger" id="resetProfile">Restaurar padrão</button>
+          <button class="primary-button save-button" id="saveProfile">Salvar alterações</button>
+        </div>
+      </footer>
+    </section>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>

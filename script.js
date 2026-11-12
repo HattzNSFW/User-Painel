@@ -109,9 +109,7 @@ let bannerURL = null;
 let backgroundURL = null;
 let cardBackgroundURL = null;
 let musicURL = null;
-let directVideoURL = null;
 let currentMusicFile = null;
-let musicSourceType = "file";
 let toastTimer = null;
 
 function openDatabase() {
@@ -878,6 +876,30 @@ function revokeURL(url) {
 }
 
 
+const VISUAL_IMAGE_EXTENSIONS = /\.(png|jpe?g|gif|webp|apng|avif|svg|bmp)$/i;
+const VISUAL_VIDEO_EXTENSIONS = /\.(mp4|webm|mov|ogv|m4v)$/i;
+const MAX_IMAGE_SIZE = 40 * 1024 * 1024;
+const MAX_VIDEO_SIZE = 120 * 1024 * 1024;
+
+function getVisualMediaKind(file) {
+  if (!file) return null;
+  if (file.type?.startsWith("image/") || VISUAL_IMAGE_EXTENSIONS.test(file.name)) return "image";
+  if (file.type?.startsWith("video/") || VISUAL_VIDEO_EXTENSIONS.test(file.name)) return "video";
+  return null;
+}
+
+function validateVisualMedia(file) {
+  const kind = getVisualMediaKind(file);
+  if (!kind) return { valid: false, message: "Formato não suportado. Use uma imagem, GIF ou vídeo compatível." };
+  const limit = kind === "video" ? MAX_VIDEO_SIZE : MAX_IMAGE_SIZE;
+  if (file.size > limit) {
+    const max = kind === "video" ? "120 MB" : "40 MB";
+    return { valid: false, message: `O arquivo ultrapassa o limite de ${max}.` };
+  }
+  return { valid: true, kind };
+}
+
+
 function prepareVideo(video) {
   video.preload = "metadata";
   video.muted = true;
@@ -906,7 +928,7 @@ function displayAvatar(file) {
   revokeURL(avatarURL);
   avatarURL = URL.createObjectURL(file);
 
-  if (file.type.startsWith("video/")) {
+  if (getVisualMediaKind(file) === "video") {
     prepareVideo($("avatarVideo"));
     $("avatarVideo").src = avatarURL;
     $("avatarVideo").hidden = false;
@@ -935,7 +957,7 @@ function displayBanner(file) {
   revokeURL(bannerURL);
   bannerURL = URL.createObjectURL(file);
 
-  if (file.type === "video/mp4") {
+  if (getVisualMediaKind(file) === "video") {
     const video = $("bannerVideo");
     prepareVideo(video);
     video.src = bannerURL;
@@ -965,7 +987,7 @@ function displayBackground(file) {
   revokeURL(backgroundURL);
   backgroundURL = URL.createObjectURL(file);
 
-  if (file.type.startsWith("video/")) {
+  if (getVisualMediaKind(file) === "video") {
     const video = $("backgroundVideo");
     prepareVideo(video);
     video.src = backgroundURL;
@@ -999,7 +1021,7 @@ function displayCardBackground(file) {
   revokeURL(cardBackgroundURL);
   cardBackgroundURL = URL.createObjectURL(file);
 
-  if (file.type === "video/mp4") {
+  if (getVisualMediaKind(file) === "video") {
     const video = $("cardBackgroundVideo");
     prepareVideo(video);
     video.src = cardBackgroundURL;
@@ -1087,7 +1109,7 @@ function updateCropPreview(key, file) {
   image.dataset.previewUrl = previewURL;
   video.dataset.previewUrl = previewURL;
 
-  if (file.type.startsWith("video/")) {
+  if (getVisualMediaKind(file) === "video") {
     video.src = previewURL;
     video.hidden = false;
     video.addEventListener("loadedmetadata", () => updateCropPreviewGeometry(key, video), { once: true });
@@ -1202,47 +1224,29 @@ function setMediaAnimation(enabled) {
 
 function displayMusic(file) {
   currentMusicFile = file;
-  musicSourceType = "file";
-  const directVideo = $("directVideoAudio");
-  directVideo.pause();
-  directVideo.removeAttribute("src");
-  revokeURL(directVideoURL);
-  directVideoURL = null;
   revokeURL(musicURL);
   musicURL = URL.createObjectURL(file);
-
-  $("profileAudio").src = musicURL;
-  $("profileAudio").volume = profile.volume / 100;
+  const audio = $("profileAudio");
+  audio.src = musicURL;
+  audio.volume = profile.volume / 100;
+  audio.loop = true;
   $("downloadMusic").disabled = false;
   $("downloadMusic").textContent = "Baixar arquivo original";
-
-  $("musicTrackName").textContent =
-    file.name.replace(/\.[^/.]+$/, "");
-
+  $("musicTrackName").textContent = file.name.replace(/\.[^/.]+$/, "");
   $("profileMusic").hidden = false;
   $("musicToggle").textContent = "▶";
 }
 
 function toggleMusic() {
-  const directVideo = $("directVideoAudio");
-  if (musicSourceType === "direct-video" && directVideo.src) {
-    if (directVideo.paused) directVideo.play().then(() => { $("musicToggle").textContent = "Ⅱ"; }).catch(() => showToast("Não foi possível reproduzir este vídeo."));
-    else { directVideo.pause(); $("musicToggle").textContent = "▶"; }
-    return;
-  }
   const audio = $("profileAudio");
-
   if (!audio.src) {
     showToast("Adicione uma música primeiro.");
     return;
   }
-
   if (audio.paused) {
-    audio.play()
-      .then(() => {
-        $("musicToggle").textContent = "Ⅱ";
-      })
-      .catch(() => showToast("Não foi possível reproduzir."));
+    audio.play().then(() => {
+      $("musicToggle").textContent = "Ⅱ";
+    }).catch(() => showToast("Não foi possível reproduzir este arquivo."));
   } else {
     audio.pause();
     $("musicToggle").textContent = "▶";
@@ -1257,23 +1261,16 @@ async function removeMusic() {
     showToast("Não foi possível remover a música.");
     return;
   }
-
-  $("profileAudio").pause();
-  $("profileAudio").removeAttribute("src");
-  $("directVideoAudio").pause();
-  $("directVideoAudio").removeAttribute("src");
-  revokeURL(directVideoURL);
-  directVideoURL = null;
+  const audio = $("profileAudio");
+  audio.pause();
+  audio.removeAttribute("src");
+  audio.load();
   currentMusicFile = null;
-  musicSourceType = "file";
-  $("downloadMusic").disabled = true;
-  $("profileMusic").hidden = true;
-
   revokeURL(musicURL);
   musicURL = null;
-
+  $("downloadMusic").disabled = true;
+  $("profileMusic").hidden = true;
   $("musicToggle").textContent = "▶";
-
   showToast("Música removida.");
 }
 
@@ -1753,6 +1750,7 @@ async function resetProfile() {
 
   $("profileAudio").pause();
   $("profileAudio").removeAttribute("src");
+  $("musicToggle").hidden = false;
   $("profileMusic").hidden = true;
 
   saveProfile();
@@ -1763,16 +1761,12 @@ async function resetProfile() {
 }
 
 async function uploadAvatar(event) {
-  const file = event.target.files[0];
-
+  const file = event.target.files?.[0];
   if (!file) return;
 
-  const valid =
-    file.type.startsWith("image/") ||
-    file.type === "video/mp4";
-
-  if (!valid) {
-    showToast("Formato de avatar não suportado.");
+  const validation = validateVisualMedia(file);
+  if (!validation.valid) {
+    showToast(validation.message);
     event.target.value = "";
     return;
   }
@@ -1782,11 +1776,11 @@ async function uploadAvatar(event) {
     displayAvatar(file);
     showToast("Avatar atualizado.");
   } catch (error) {
-    console.error(error);
-    showToast("Não foi possível salvar o avatar.");
+    console.error("Falha ao salvar avatar:", error);
+    showToast("Não foi possível salvar avatar. Verifique o espaço disponível no navegador.");
+  } finally {
+    event.target.value = "";
   }
-
-  event.target.value = "";
 }
 
 async function removeAvatar() {
@@ -1807,14 +1801,12 @@ async function removeAvatar() {
 }
 
 async function uploadBanner(event) {
-  const file = event.target.files[0];
-
+  const file = event.target.files?.[0];
   if (!file) return;
 
-  const valid = file.type.startsWith("image/") || file.type === "video/mp4";
-
-  if (!valid) {
-    showToast("Formato de banner não suportado.");
+  const validation = validateVisualMedia(file);
+  if (!validation.valid) {
+    showToast(validation.message);
     event.target.value = "";
     return;
   }
@@ -1824,11 +1816,11 @@ async function uploadBanner(event) {
     displayBanner(file);
     showToast("Banner atualizado.");
   } catch (error) {
-    console.error(error);
-    showToast("Não foi possível salvar o banner.");
+    console.error("Falha ao salvar banner:", error);
+    showToast("Não foi possível salvar banner. Verifique o espaço disponível no navegador.");
+  } finally {
+    event.target.value = "";
   }
-
-  event.target.value = "";
 }
 
 async function removeBanner() {
@@ -1851,8 +1843,10 @@ async function removeBanner() {
 async function uploadBackground(event) {
   const file = event.target.files?.[0];
   if (!file) return;
-  if (!(file.type.startsWith("image/") || file.type === "video/mp4")) {
-    showToast("Escolha uma imagem, GIF ou vídeo MP4.");
+
+  const validation = validateVisualMedia(file);
+  if (!validation.valid) {
+    showToast(validation.message);
     event.target.value = "";
     return;
   }
@@ -1862,10 +1856,11 @@ async function uploadBackground(event) {
     displayBackground(file);
     showToast("Fundo da página atualizado.");
   } catch (error) {
-    console.error(error);
-    showToast("Não foi possível salvar o fundo.");
+    console.error("Falha ao salvar fundo da página:", error);
+    showToast("Não foi possível salvar fundo da página. Verifique o espaço disponível no navegador.");
+  } finally {
+    event.target.value = "";
   }
-  event.target.value = "";
 }
 
 async function removeBackground() {
@@ -1885,21 +1880,24 @@ async function removeBackground() {
 async function uploadCardBackground(event) {
   const file = event.target.files?.[0];
   if (!file) return;
-  const valid = file.type.startsWith("image/") || file.type === "video/mp4";
-  if (!valid) {
-    showToast("Escolha uma imagem ou um vídeo MP4.");
+
+  const validation = validateVisualMedia(file);
+  if (!validation.valid) {
+    showToast(validation.message);
     event.target.value = "";
     return;
   }
+
   try {
     await saveMedia("cardBackground", file);
     displayCardBackground(file);
     showToast("Fundo do cartão atualizado.");
   } catch (error) {
-    console.error(error);
-    showToast("Não foi possível salvar o fundo do cartão.");
+    console.error("Falha ao salvar fundo do cartão:", error);
+    showToast("Não foi possível salvar fundo do cartão. Verifique o espaço disponível no navegador.");
+  } finally {
+    event.target.value = "";
   }
-  event.target.value = "";
 }
 
 async function removeCardBackground() {
@@ -1921,8 +1919,14 @@ async function uploadMusic(event) {
 
   if (!file) return;
 
-  if (!file.type.startsWith("audio/")) {
-    showToast("Escolha um arquivo de áudio.");
+  const audioExtension = /\.(mp3|wav|ogg|m4a|aac|flac|opus)$/i.test(file.name);
+  if (!file.type.startsWith("audio/") && !audioExtension) {
+    showToast("Escolha um arquivo de áudio compatível.");
+    event.target.value = "";
+    return;
+  }
+  if (file.size > 100 * 1024 * 1024) {
+    showToast("A música ultrapassa o limite de 100 MB.");
     event.target.value = "";
     return;
   }
@@ -1930,48 +1934,18 @@ async function uploadMusic(event) {
   try {
     await saveMedia("music", file);
     displayMusic(file);
-    showToast("Música adicionada.");
+    showToast("Música adicionada ao perfil.");
   } catch (error) {
-    console.error(error);
-    showToast("Não foi possível salvar a música.");
+    console.error("Falha ao salvar música:", error);
+    showToast("Não foi possível salvar. Verifique o espaço disponível no navegador.");
+  } finally {
+    event.target.value = "";
   }
-
-  event.target.value = "";
 }
 
-async function loadMusicVideoLink() {
-  const raw = $("musicVideoUrl").value.trim();
-  if (!raw) { showToast("Cole um link primeiro."); return; }
-  let url;
-  try { url = new URL(raw); } catch { showToast("Link inválido."); return; }
-  if (!/^https?:$/.test(url.protocol)) { showToast("Use um link HTTP ou HTTPS."); return; }
-  const host = url.hostname.toLowerCase().replace(/^www\./, "");
-  const directMp4 = /\.mp4(?:$|[?#])/i.test(url.pathname + url.search);
-  if (directMp4) {
-    try {
-      const video = $("directVideoAudio");
-      $("profileAudio").pause();
-      $("profileAudio").removeAttribute("src");
-      revokeURL(musicURL); musicURL = null;
-      video.pause(); video.src = url.href; video.volume = profile.volume / 100;
-      musicSourceType = "direct-video"; currentMusicFile = null;
-      $("downloadMusic").disabled = true;
-      $("musicTrackName").textContent = "Áudio de vídeo MP4";
-      $("profileMusic").hidden = false;
-      await video.play();
-      $("musicToggle").textContent = "Ⅱ";
-      showToast("Reproduzindo o áudio do MP4.");
-    } catch (error) { console.error(error); showToast("Não foi possível reproduzir o MP4. Verifique se o link é público e permite acesso direto."); }
-    return;
-  }
-  const supported = host === "youtube.com" || host === "m.youtube.com" || host === "youtu.be" || host === "tiktok.com" || host === "instagram.com";
-  if (!supported) { showToast("Use YouTube, TikTok, Instagram ou um link direto de arquivo MP4."); return; }
-  showToast("Link reconhecido. Para tocar apenas o áudio dessas plataformas é necessário um serviço externo/backend; o navegador não consegue extrair a faixa de áudio com segurança. Por enquanto, abra o link na própria plataforma.");
-  window.open(url.href, "_blank", "noopener,noreferrer");
-}
 
 function downloadOriginalMusic() {
-  if (!currentMusicFile || musicSourceType !== "file") { showToast("O download está disponível para arquivos enviados."); return; }
+  if (!currentMusicFile) { showToast("O download está disponível para arquivos enviados."); return; }
   const url = URL.createObjectURL(currentMusicFile);
   const anchor = document.createElement("a");
   anchor.href = url;
@@ -2218,17 +2192,19 @@ function setupEvents() {
   });
 
   $("musicToggle").addEventListener("click", toggleMusic);
+  $("profileAudio").addEventListener("play", () => { $("musicToggle").textContent = "Ⅱ"; });
+  $("profileAudio").addEventListener("pause", () => { $("musicToggle").textContent = "▶"; });
+  $("profileAudio").addEventListener("ended", () => { $("musicToggle").textContent = "▶"; });
   $("previewMusic").addEventListener("click", toggleMusic);
   $("downloadMusic").addEventListener("click", downloadOriginalMusic);
-  $("loadMusicVideo").addEventListener("click", loadMusicVideoLink);
-  $("musicVideoUrl").addEventListener("keydown", (event) => { if (event.key === "Enter") loadMusicVideoLink(); });
 
   $("musicVolume").addEventListener("input", (event) => {
     const value = Number(event.target.value);
 
     $("musicVolumeValue").textContent = `${value}%`;
+    profile.volume = value;
     $("profileAudio").volume = value / 100;
-    $("directVideoAudio").volume = value / 100;
+    saveProfile();
   });
 
   $("saveTheme").addEventListener("click", saveCurrentTheme);
@@ -2285,6 +2261,8 @@ async function init() {
   }
 
   $("profileAudio").volume = profile.volume / 100;
+  $("musicVolume").value = profile.volume;
+  $("musicVolumeValue").textContent = `${profile.volume}%`;
 
   setupEvents();
   renderProfile();

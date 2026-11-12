@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;500;600;700&family=Cormorant+Garamond:wght@400;500;600;700&family=DM+Sans:wght@400;500;600;700&family=Lora:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&family=Montserrat:wght@400;500;600;700&family=Playfair+Display:wght@500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
 
-  <link rel="stylesheet" href="style-candidato.css">
+  <link rel="stylesheet" href="style.css">
 </head>
 
 <body>
@@ -53,7 +53,7 @@
             <div class="avatar-frame" id="avatarFrame" aria-hidden="true"></div>
 
             <div class="avatar-photo">
-              <img id="avatarImage" alt="Avatar" hidden>
+              <img id="avatarImage" alt="Avatar" decoding="async" hidden>
               <video id="avatarVideo" autoplay muted loop playsinline hidden></video>
               <div class="avatar-placeholder" id="avatarPlaceholder">
                 <span>✦</span>
@@ -110,7 +110,7 @@
             <strong id="musicTrackName">Minha música</strong>
           </div>
           <button class="music-play" id="musicToggle" aria-label="Reproduzir ou pausar">▶</button>
-          <audio id="profileAudio" loop></audio>
+          <audio id="profileAudio" loop preload="metadata"></audio>
         </section>
 
         <footer class="profile-footer">
@@ -212,9 +212,9 @@
             <label>Avatar</label>
             <label class="upload-box" for="avatarUpload">
               <span class="upload-symbol">＋</span>
-              <span><strong>Escolher foto ou vídeo</strong></span>
+              <span><strong>Escolher imagem ou vídeo</strong></span>
             </label>
-            <input type="file" id="avatarUpload" accept="image/*,video/mp4" hidden>
+            <input type="file" id="avatarUpload" accept="image/png,image/jpeg,image/gif,image/webp,image/apng,image/avif,image/svg+xml,image/bmp,video/mp4,video/webm,video/quicktime,video/ogg,video/x-m4v" hidden>
             <div class="crop-editor" data-crop="avatar">
               <div class="crop-editor-heading">
                 <strong>Enquadramento</strong>
@@ -254,9 +254,9 @@
             <label>Banner</label>
             <label class="upload-box" for="bannerUpload">
               <span class="upload-symbol">＋</span>
-              <span><strong>Escolher banner</strong></span>
+              <span><strong>Escolher imagem ou vídeo</strong></span>
             </label>
-            <input type="file" id="bannerUpload" accept="image/*,video/mp4" hidden>
+            <input type="file" id="bannerUpload" accept="image/png,image/jpeg,image/gif,image/webp,image/apng,image/avif,image/svg+xml,image/bmp,video/mp4,video/webm,video/quicktime,video/ogg,video/x-m4v" hidden>
             <div class="crop-editor" data-crop="banner">
               <div class="crop-editor-heading">
                 <strong>Enquadramento</strong>
@@ -304,7 +304,7 @@
               <span class="upload-symbol">＋</span>
               <span><strong>Escolher imagem ou vídeo</strong></span>
             </label>
-            <input type="file" id="cardBackgroundUpload" accept="image/*,video/mp4" hidden>
+            <input type="file" id="cardBackgroundUpload" accept="image/png,image/jpeg,image/gif,image/webp,image/apng,image/avif,image/svg+xml,image/bmp,video/mp4,video/webm,video/quicktime,video/ogg,video/x-m4v" hidden>
             <div class="crop-editor" data-crop="cardBackground">
               <div class="crop-editor-heading">
                 <strong>Enquadramento</strong>
@@ -346,7 +346,7 @@
               <span class="upload-symbol">＋</span>
               <span><strong>Escolher imagem, GIF ou vídeo para a página</strong></span>
             </label>
-            <input type="file" id="backgroundUpload" accept="image/*,video/mp4" hidden>
+            <input type="file" id="backgroundUpload" accept="image/png,image/jpeg,image/gif,image/webp,image/apng,image/avif,image/svg+xml,image/bmp,video/mp4,video/webm,video/quicktime,video/ogg,video/x-m4v" hidden>
             <div class="crop-editor" data-crop="background">
               <div class="crop-editor-heading">
                 <strong>Enquadramento</strong>
@@ -384,7 +384,7 @@
 
           <label class="switch-row">
             <span>
-              <strong>Reproduzir animações</strong>
+              <strong>Reproduzir vídeos automaticamente</strong>
             </span>
             <input type="checkbox" id="animateMedia" checked>
             <span class="switch"></span>
@@ -430,27 +430,21 @@
             <span class="switch"></span>
           </label>
 
-          <div class="field-group">
+          <div class="field-group music-settings">
             <label>Música do perfil</label>
             <label class="upload-box" for="musicUpload">
               <span class="upload-symbol">♫</span>
-              <span><strong>Selecionar música</strong></span>
+              <span><strong>Selecionar arquivo de áudio</strong><small>MP3, WAV, OGG, M4A, AAC e FLAC (conforme o navegador)</small></span>
             </label>
-            <input type="file" id="musicUpload" accept="audio/*" hidden>
-            <div class="field-hint">Você também pode colar um link de vídeo. Links MP4 diretos podem tocar somente o áudio; links de YouTube, TikTok e Instagram abrem o player oficial, pois essas plataformas não permitem extração de áudio apenas pelo navegador.</div>
-            <label class="range-label" for="musicVideoUrl">Link de vídeo</label>
-            <input class="text-input" type="url" id="musicVideoUrl" placeholder="YouTube, TikTok, Instagram ou MP4 direto" autocomplete="url">
-            <button class="text-button" type="button" id="loadMusicVideo">Usar link</button>
+            <input type="file" id="musicUpload" accept="audio/*,.mp3,.wav,.ogg,.m4a,.aac,.flac" hidden>
+            <p class="field-hint">A música fica armazenada neste navegador e aparece no player do perfil. Para usar uma música de outra plataforma, baixe o arquivo por meios autorizados e envie aqui.</p>
             <div class="music-actions">
-              <button class="text-button" id="previewMusic">Reproduzir / pausar</button>
+              <button class="text-button" id="previewMusic" type="button">Reproduzir / pausar</button>
               <button class="text-button" id="downloadMusic" type="button" disabled>Baixar arquivo original</button>
-              <button class="text-button danger" id="removeMusic">Remover música</button>
+              <button class="text-button danger" id="removeMusic" type="button">Remover música</button>
             </div>
-            <video id="directVideoAudio" playsinline hidden></video>
-            <label class="range-label" for="musicVolume">
-              Volume <span id="musicVolumeValue">12%</span>
-            </label>
-            <input type="range" id="musicVolume" min="0" max="35" value="12">
+            <label class="range-label" for="musicVolume">Volume <span id="musicVolumeValue">12%</span></label>
+            <input type="range" id="musicVolume" min="0" max="100" value="12">
           </div>
         </section>
 
@@ -697,6 +691,6 @@
     </section>
   </div>
 
-  <script src="script-candidato.js"></script>
+  <script src="script.js"></script>
 </body>
 </html>

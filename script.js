@@ -7,12 +7,29 @@ const DB_NAME = "MeuPainelDB";
 const DB_VERSION = 1;
 const STORE_NAME = "imagens";
 const THEMES_STORAGE_KEY = "meuTemas";
+const PROFILE_IDS = ["perfil-1", "perfil-2"];
+const requestedProfileId = new URLSearchParams(window.location.search).get("profile");
+const ACTIVE_PROFILE_ID = PROFILE_IDS.includes(requestedProfileId) ? requestedProfileId : "perfil-1";
+const OTHER_PROFILE_ID = ACTIVE_PROFILE_ID === "perfil-1" ? "perfil-2" : "perfil-1";
+
+function getProfileStorageKey(profileId = ACTIVE_PROFILE_ID) {
+  return `${STORAGE_KEY}:${profileId}`;
+}
+
+function getThemesStorageKey(profileId = ACTIVE_PROFILE_ID) {
+  return `${THEMES_STORAGE_KEY}:${profileId}`;
+}
+
+function getScopedMediaKey(key, profileId = ACTIVE_PROFILE_ID) {
+  return `${profileId}:${key}`;
+}
 
 const DEFAULT_PROFILE = {
   nome: "Seu Nome",
   usuario: "seuusuario",
   bio: "Sua identidade, do seu jeito.",
   verificado: false,
+  verificadoCor: "#729cff",
   cargo: "",
   insignias: [],
   rodape: "",
@@ -24,6 +41,7 @@ const DEFAULT_PROFILE = {
   bannerCrop: { x: 50, y: 50, zoom: 100 },
   cardBackgroundCrop: { x: 50, y: 50, zoom: 100 },
   backgroundCrop: { x: 50, y: 50, zoom: 100 },
+  musicBarBackgroundCrop: { x: 50, y: 50, zoom: 100 },
   dividerStyle: "ornamental",
   dividerCustomColorEnabled: false,
   dividerColor: "#a78bfa",
@@ -37,6 +55,14 @@ const DEFAULT_PROFILE = {
   bannerPausado: false,
   fundoPausado: false,
   cardBackgroundPausado: false,
+  bannerOpacity: 100,
+  cardBackgroundOpacity: 100,
+  backgroundOpacity: 34,
+  musicBarBackgroundOpacity: 24,
+  musicPlayerWidth: 360,
+  musicPlayerHeight: 64,
+  musicPlayerX: null,
+  musicPlayerY: null,
   moldura: "none",
   raridadeMoldura: "none",
   molduraCorPersonalizada: false,
@@ -110,6 +136,9 @@ let backgroundURL = null;
 let cardBackgroundURL = null;
 let musicURL = null;
 let currentMusicFile = null;
+let musicBarBackgroundURL = null;
+let musicPlayerResizeObserver = null;
+let musicPlayerResizeTimer = null;
 let musicCoverURL = null;
 let currentMusicCoverFile = null;
 let musicMediaType = "audio";
@@ -144,39 +173,46 @@ function saveMedia(key, file) {
     }
 
     const transaction = db.transaction(STORE_NAME, "readwrite");
-
-    transaction.objectStore(STORE_NAME).put(file, key);
-
+    transaction.objectStore(STORE_NAME).put(file, getScopedMediaKey(key));
     transaction.oncomplete = () => resolve();
     transaction.onerror = () => reject(transaction.error);
   });
 }
 
-function getMedia(key) {
+function readStoredMedia(key) {
   return new Promise((resolve, reject) => {
-    if (!db) {
-      resolve(null);
-      return;
-    }
-
+    if (!db) return resolve(null);
     const transaction = db.transaction(STORE_NAME, "readonly");
     const request = transaction.objectStore(STORE_NAME).get(key);
-
     request.onsuccess = () => resolve(request.result || null);
     request.onerror = () => reject(request.error);
   });
 }
 
+async function getMedia(key) {
+  if (!db) return null;
+  const scoped = await readStoredMedia(getScopedMediaKey(key));
+  if (scoped) return scoped;
+
+  // Compatibility with the original single-profile Hättz database.
+  // Existing media is preserved as profile 1 when users update to this version.
+  if (ACTIVE_PROFILE_ID === "perfil-1") {
+    return await readStoredMedia(key);
+  }
+
+  return null;
+}
+
 function deleteMedia(key) {
   return new Promise((resolve, reject) => {
-    if (!db) {
-      resolve();
-      return;
-    }
+    if (!db) return resolve();
 
     const transaction = db.transaction(STORE_NAME, "readwrite");
+    const store = transaction.objectStore(STORE_NAME);
+    store.delete(getScopedMediaKey(key));
 
-    transaction.objectStore(STORE_NAME).delete(key);
+    // Remove old unscoped values only from profile 1, where they originated.
+    if (ACTIVE_PROFILE_ID === "perfil-1") store.delete(key);
 
     transaction.oncomplete = () => resolve();
     transaction.onerror = () => reject(transaction.error);
@@ -219,7 +255,8 @@ function showToast(message) {
 }
 
 function saveProfile() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(profile));
+  localStorage.setItem(getProfileStorageKey(), JSON.stringify(profile));
+  updateProfileSwitcher();
 }
 
 function normalizeUsername(value) {
@@ -232,11 +269,18 @@ function normalizeUsername(value) {
 
 function loadProfile() {
   try {
-    const saved = localStorage.getItem(STORAGE_KEY);
+    const scopedKey = getProfileStorageKey();
+    const legacySaved = ACTIVE_PROFILE_ID === "perfil-1" ? localStorage.getItem(STORAGE_KEY) : null;
+    const saved = localStorage.getItem(scopedKey) || legacySaved;
 
     if (!saved) {
       profile = structuredClone(DEFAULT_PROFILE);
       return;
+    }
+
+    // Copy the old single-profile data into the new profile-1 slot without deleting the original.
+    if (!localStorage.getItem(scopedKey) && legacySaved) {
+      localStorage.setItem(scopedKey, legacySaved);
     }
 
     const parsed = JSON.parse(saved);
@@ -267,12 +311,12 @@ function loadProfile() {
     profile.avatarPausado = Boolean(parsed.avatarPausado);
     profile.bannerPausado = Boolean(parsed.bannerPausado);
     profile.bannerHeight = Number.isFinite(Number(parsed.bannerHeight)) ? Math.min(620, Math.max(240, Number(parsed.bannerHeight))) : 355;
-    for (const key of ["avatarCrop", "bannerCrop", "cardBackgroundCrop", "backgroundCrop"]) {
+    for (const key of ["avatarCrop", "bannerCrop", "cardBackgroundCrop", "backgroundCrop", "musicBarBackgroundCrop"]) {
       const crop = parsed[key] || {};
       profile[key] = {
         x: Math.min(100, Math.max(0, Number(crop.x ?? 50))),
         y: Math.min(100, Math.max(0, Number(crop.y ?? 50))),
-        zoom: Math.min(250, Math.max(100, Number(crop.zoom ?? 100)))
+        zoom: Math.min(key === "musicBarBackgroundCrop" ? 300 : 250, Math.max(100, Number(crop.zoom ?? 100)))
       };
     }
     profile.dividerStyle = ["none", "minimal", "double", "dotted", "ornamental", "celestial", "gothic", "royal"].includes(parsed.dividerStyle) ? parsed.dividerStyle : "ornamental";
@@ -289,6 +333,16 @@ function loadProfile() {
     profile.raridadeMoldura = parsed.raridadeMoldura || "none";
     profile.molduraCorPersonalizada = Boolean(parsed.molduraCorPersonalizada);
     profile.molduraCor = /^#[0-9a-f]{6}$/i.test(parsed.molduraCor || "") ? parsed.molduraCor : "#a78bfa";
+    profile.verificadoCor = /^#[0-9a-f]{6}$/i.test(parsed.verificadoCor || "") ? parsed.verificadoCor : DEFAULT_PROFILE.verificadoCor;
+    for (const key of ["bannerOpacity", "cardBackgroundOpacity", "backgroundOpacity", "musicBarBackgroundOpacity"]) {
+      const fallback = Number(DEFAULT_PROFILE[key]);
+      const value = Number(parsed[key]);
+      profile[key] = Number.isFinite(value) ? Math.min(100, Math.max(0, value)) : fallback;
+    }
+    profile.musicPlayerWidth = Math.min(620, Math.max(220, Number(parsed.musicPlayerWidth) || DEFAULT_PROFILE.musicPlayerWidth));
+    profile.musicPlayerHeight = Math.min(220, Math.max(56, Number(parsed.musicPlayerHeight) || DEFAULT_PROFILE.musicPlayerHeight));
+    profile.musicPlayerX = parsed.musicPlayerX !== null && parsed.musicPlayerX !== undefined && Number.isFinite(Number(parsed.musicPlayerX)) ? Number(parsed.musicPlayerX) : null;
+    profile.musicPlayerY = parsed.musicPlayerY !== null && parsed.musicPlayerY !== undefined && Number.isFinite(Number(parsed.musicPlayerY)) ? Number(parsed.musicPlayerY) : null;
 
     const reservedRoles = /\b(admin|administrator|dev|developer|staff|moderator|owner|dono)\b/i;
     if (reservedRoles.test(String(profile.cargo || "").trim())) profile.cargo = "";
@@ -306,6 +360,46 @@ function loadProfile() {
     console.error("Erro ao carregar perfil:", error);
     profile = structuredClone(DEFAULT_PROFILE);
   }
+}
+
+function updateProfileSwitcher() {
+  const button = $("openOtherProfile");
+  const label = $("openOtherProfileLabel");
+  if (!button || !label) return;
+
+  if (ACTIVE_PROFILE_ID === "perfil-1") {
+    const exists = Boolean(localStorage.getItem(getProfileStorageKey("perfil-2")));
+    label.textContent = exists ? "Abrir perfil 2" : "Criar perfil 2";
+    button.title = exists
+      ? "Abrir o segundo perfil em uma nova aba"
+      : "Criar o segundo perfil e abrir em uma nova aba";
+    button.setAttribute("aria-label", button.title);
+  } else {
+    label.textContent = "Abrir perfil 1";
+    button.title = "Abrir o primeiro perfil em uma nova aba";
+    button.setAttribute("aria-label", button.title);
+  }
+}
+
+function openOtherProfile() {
+  const targetId = OTHER_PROFILE_ID;
+
+  // Create the second slot on demand. Its settings and media remain isolated from profile 1.
+  if (targetId === "perfil-2" && !localStorage.getItem(getProfileStorageKey("perfil-2"))) {
+    localStorage.setItem(getProfileStorageKey("perfil-2"), JSON.stringify(structuredClone(DEFAULT_PROFILE)));
+  }
+
+  const targetUrl = new URL(window.location.href);
+  targetUrl.searchParams.set("profile", targetId);
+
+  const opened = window.open(targetUrl.toString(), "_blank");
+  if (opened) {
+    try { opened.opener = null; } catch {}
+  } else {
+    showToast("O navegador bloqueou a nova aba. Permita pop-ups para este site e tente novamente.");
+  }
+
+  updateProfileSwitcher();
 }
 
 function applyColors(colors) {
@@ -810,7 +904,12 @@ function renderIdentity() {
   roleChip.classList.toggle("owner-role", /^(owner|dono)$/i.test(safeRole));
   roleChip.title = safeRole || "Identificação do perfil";
   roleChip.setAttribute("aria-label", roleChip.title);
-  $("verifiedBadge").hidden = !profile.verificado;
+  const verifiedBadge = $("verifiedBadge");
+  const verifiedColor = /^#[0-9a-f]{6}$/i.test(profile.verificadoCor || "")
+    ? profile.verificadoCor
+    : DEFAULT_PROFILE.verificadoCor;
+  verifiedBadge.hidden = !profile.verificado;
+  verifiedBadge.style.setProperty("--verified-color", verifiedColor);
   document.querySelector(".profile-card")?.classList.toggle("effects-enabled", profile.efeitosPerfil !== false);
   $("footerText").textContent = profile.rodape || "";
 
@@ -869,6 +968,8 @@ function renderProfile() {
   applyCropSettings();
   applyDividerSettings();
   applyBannerSettings();
+  applyMediaOpacitySettings();
+  applyMusicPlayerSize();
   updateThemeButtons();
 }
 
@@ -904,13 +1005,257 @@ function validateVisualMedia(file) {
 
 
 function prepareVideo(video) {
-  video.preload = "metadata";
+  if (!video) return;
+  video.pause();
+  video.removeAttribute("autoplay");
+  video.autoplay = false;
+  video.preload = "none";
   video.muted = true;
   video.loop = true;
   video.playsInline = true;
   video.setAttribute("playsinline", "");
   video.setAttribute("webkit-playsinline", "");
   video.disablePictureInPicture = true;
+  video.disableRemotePlayback = true;
+
+  const state = visualVideoStates.get(video);
+  if (state) {
+    state.generation += 1;
+    state.pending = false;
+    state.loadStarted = false;
+    state.sourceKey = null;
+    state.autoplayBlocked = false;
+    state.mediaError = false;
+    state.errorNotified = false;
+  }
+}
+
+const visualVideoStates = new Map();
+let visualVideoSyncQueued = false;
+let lastVisualVideoSync = 0;
+
+const VISUAL_VIDEO_CONFIG = [
+  // The page background is the largest visual layer; keep it eligible even
+  // when its element spans more than the viewport and its intersection ratio is small.
+  { id: "backgroundVideo", priority: 100, alwaysVisible: true, paused: () => profile.fundoPausado },
+  { id: "bannerVideo", priority: 90, paused: () => profile.bannerPausado },
+  { id: "avatarVideo", priority: 80, paused: () => profile.avatarPausado },
+  { id: "cardBackgroundVideo", priority: 60, paused: () => profile.cardBackgroundPausado },
+  { id: "musicBarBackgroundVideo", priority: 50, paused: () => false }
+];
+
+function isVisualVideoNearViewport(video, margin = 220) {
+  if (!video || video.hidden || !video.hasAttribute("src")) return false;
+  const rect = video.getBoundingClientRect();
+  if (rect.width <= 0 || rect.height <= 0) return false;
+  return rect.bottom >= -margin && rect.top <= window.innerHeight + margin &&
+    rect.right >= -margin && rect.left <= window.innerWidth + margin;
+}
+
+function getVisualVideoSlots() {
+  const compactScreen = window.matchMedia?.("(max-width: 760px)").matches ||
+    (Number(navigator.deviceMemory) > 0 && Number(navigator.deviceMemory) <= 4);
+  return compactScreen ? 2 : 3;
+}
+
+function registerVisualVideo(element, config) {
+  if (!element) return;
+  let state = visualVideoStates.get(element);
+
+  if (!state) {
+    state = {
+      element,
+      id: config.id,
+      priority: config.priority,
+      alwaysVisible: Boolean(config.alwaysVisible),
+      isManuallyPaused: config.paused,
+      visible: Boolean(config.alwaysVisible),
+      ratio: config.alwaysVisible ? 1 : 0,
+      pending: false,
+      loadStarted: false,
+      sourceKey: null,
+      generation: 0,
+      autoplayBlocked: false,
+      mediaError: false,
+      errorNotified: false,
+      eventsBound: false
+    };
+    visualVideoStates.set(element, state);
+  } else {
+    state.id = config.id;
+    state.priority = config.priority;
+    state.alwaysVisible = Boolean(config.alwaysVisible);
+    state.isManuallyPaused = config.paused;
+  }
+
+  if (!state.eventsBound) {
+    state.eventsBound = true;
+    const refresh = () => {
+      state.loadStarted = element.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA || state.loadStarted;
+      queueVisualVideoSync();
+    };
+    ["loadedmetadata", "loadeddata", "canplay", "playing"].forEach((name) => {
+      element.addEventListener(name, refresh);
+    });
+    element.addEventListener("emptied", () => {
+      // load() also emits `emptied` while a new source is being fetched.
+      // Reset only when the src was actually removed, otherwise loading can loop.
+      if (!element.hasAttribute("src")) {
+        state.generation += 1;
+        state.pending = false;
+        state.loadStarted = false;
+        state.sourceKey = null;
+        state.mediaError = false;
+        state.autoplayBlocked = false;
+      }
+      queueVisualVideoSync();
+    });
+    element.addEventListener("error", () => {
+      const code = element.error?.code;
+      if (!element.hasAttribute("src") || code === 1) {
+        state.pending = false;
+        return;
+      }
+      state.generation += 1;
+      state.pending = false;
+      state.mediaError = true;
+      const label = state.id === "backgroundVideo" ? "fundo da página" :
+        state.id === "bannerVideo" ? "banner" : state.id === "avatarVideo" ? "avatar" :
+        state.id === "cardBackgroundVideo" ? "fundo do cartão" : "fundo do player";
+      if (!state.errorNotified) {
+        state.errorNotified = true;
+        const detail = code === 3 || code === 4
+          ? "O codec não é compatível. Converta para MP4 H.264."
+          : "O navegador não conseguiu carregar este arquivo.";
+        console.warn(`Falha no vídeo de ${label}.`, element.error);
+        showToast(`Vídeo do ${label}: ${detail}`);
+      }
+    });
+  }
+}
+
+function refreshVisualVideoVisibility(states) {
+  states.forEach((state) => {
+    if (state.alwaysVisible) {
+      state.visible = !state.element.hidden && state.element.hasAttribute("src");
+      state.ratio = state.visible ? 1 : 0;
+      return;
+    }
+    const video = state.element;
+    state.visible = isVisualVideoNearViewport(video);
+    state.ratio = state.visible ? 1 : 0;
+  });
+}
+
+function queueVisualVideoSync() {
+  if (visualVideoSyncQueued) return;
+  visualVideoSyncQueued = true;
+  requestAnimationFrame(() => {
+    visualVideoSyncQueued = false;
+    const now = performance.now();
+    // Coalesce bursts of media/scroll events without creating a playback loop.
+    if (now - lastVisualVideoSync < 40) {
+      setTimeout(queueVisualVideoSync, 40);
+      return;
+    }
+    lastVisualVideoSync = now;
+    syncVisualVideoPlayback();
+  });
+}
+
+function syncVisualVideoPlayback() {
+  const pageCanAnimate = profile.animarMidia !== false && document.visibilityState !== "hidden";
+  const states = [...visualVideoStates.values()];
+  refreshVisualVideoVisibility(states);
+
+  const candidates = states.filter((state) => {
+    const video = state.element;
+    return pageCanAnimate && state.visible && !video.hidden && video.hasAttribute("src") &&
+      !state.isManuallyPaused() && !state.autoplayBlocked && !state.mediaError;
+  }).sort((a, b) => {
+    const scoreA = a.priority + Math.min(1, a.ratio) * 8;
+    const scoreB = b.priority + Math.min(1, b.ratio) * 8;
+    return scoreB - scoreA;
+  });
+
+  const musicVideo = $("profileVideo");
+  const musicVideoIsPlaying = musicMediaType === "video" && musicVideo && !musicVideo.paused;
+  const slots = Math.max(1, getVisualVideoSlots() - (musicVideoIsPlaying ? 1 : 0));
+  const selected = new Set(candidates.slice(0, slots));
+
+  states.forEach((state) => {
+    const video = state.element;
+    const shouldPlay = selected.has(state);
+    const sourceKey = video.getAttribute("src") || video.currentSrc || "";
+
+    if (sourceKey && state.sourceKey !== sourceKey) {
+      state.generation += 1;
+      state.pending = false;
+      state.loadStarted = false;
+      state.sourceKey = sourceKey;
+      state.autoplayBlocked = false;
+      state.mediaError = false;
+      state.errorNotified = false;
+    }
+
+    if (!shouldPlay) {
+      if (state.pending) {
+        state.generation += 1;
+        state.pending = false;
+      }
+      if (!video.paused) video.pause();
+      video.preload = state.visible && !video.hidden ? "metadata" : "none";
+      if (video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) state.loadStarted = false;
+      return;
+    }
+
+    video.muted = true;
+    video.loop = true;
+    video.playsInline = true;
+    video.preload = "auto";
+
+    if (state.pending || !video.paused || state.autoplayBlocked || state.mediaError) return;
+
+    // Explicitly ask the browser to fetch and decode the first frame before play().
+    // This avoids starting with an empty frame and lets loadeddata/canplay resume scheduling.
+    if (video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
+      if (!state.loadStarted) {
+        state.loadStarted = true;
+        try { video.load(); }
+        catch (error) {
+          state.loadStarted = false;
+          console.warn(`Não foi possível carregar o vídeo ${state.id}.`, error);
+        }
+      }
+      return;
+    }
+
+    state.pending = true;
+    const generation = ++state.generation;
+    Promise.resolve().then(() => video.play()).then(() => {
+      const requestIsCurrent = state.generation === generation;
+      if (!requestIsCurrent || !selected.has(state) || document.visibilityState === "hidden") {
+        video.pause();
+      }
+      if (requestIsCurrent) state.pending = false;
+      queueVisualVideoSync();
+    }).catch((error) => {
+      // A previous play() may reject with AbortError when a source is replaced.
+      // Never let that stale rejection block playback of the newly selected file.
+      if (state.generation !== generation) return;
+      state.pending = false;
+      if (error?.name === "AbortError") return;
+      if (error?.name === "NotAllowedError") {
+        state.autoplayBlocked = true;
+        console.warn(`Autoplay bloqueado para ${state.id}.`, error);
+      } else if (error?.name === "NotSupportedError") {
+        state.mediaError = true;
+        console.warn(`Formato de vídeo não suportado em ${state.id}.`, error);
+      } else {
+        console.warn(`Falha ao iniciar vídeo ${state.id}.`, error);
+      }
+    });
+  });
 }
 
 function clearAvatar() {
@@ -922,6 +1267,7 @@ function clearAvatar() {
   $("avatarImage").removeAttribute("src");
   $("avatarVideo").pause();
   $("avatarVideo").removeAttribute("src");
+  $("avatarVideo").load();
 }
 
 function displayAvatar(file) {
@@ -952,6 +1298,7 @@ function clearBanner() {
   $("bannerImage").removeAttribute("src");
   $("bannerVideo").pause();
   $("bannerVideo").removeAttribute("src");
+  $("bannerVideo").load();
 }
 
 function displayBanner(file) {
@@ -978,6 +1325,7 @@ function clearBackground() {
   const image = $("backgroundImage");
   video.pause();
   video.removeAttribute("src");
+  video.load();
   video.hidden = true;
   image.hidden = true;
   image.removeAttribute("src");
@@ -1015,6 +1363,7 @@ function clearCardBackground() {
   video.pause();
   video.hidden = true;
   video.removeAttribute("src");
+  video.load();
 }
 
 function displayCardBackground(file) {
@@ -1038,6 +1387,215 @@ function displayCardBackground(file) {
   applyMediaPlayback();
 }
 
+function clampPercent(value, fallback = 100) {
+  const number = Number(value);
+  return Number.isFinite(number) ? Math.min(100, Math.max(0, number)) : fallback;
+}
+
+function applyMediaOpacitySettings() {
+  const groups = [
+    { key: "bannerOpacity", ids: ["bannerImage", "bannerVideo"], fallback: 100 },
+    { key: "cardBackgroundOpacity", ids: ["cardBackgroundImage", "cardBackgroundVideo"], fallback: 100 },
+    { key: "backgroundOpacity", ids: ["backgroundImage", "backgroundVideo"], fallback: 34 },
+    { key: "musicBarBackgroundOpacity", ids: ["musicBarBackgroundImage", "musicBarBackgroundVideo"], fallback: 24 }
+  ];
+
+  groups.forEach(({ key, ids, fallback }) => {
+    const opacity = clampPercent(profile[key], fallback) / 100;
+    ids.forEach((id) => {
+      const element = $(id);
+      if (element) element.style.opacity = String(opacity);
+    });
+    const input = $(key);
+    const output = $(`${key}Value`);
+    if (input) input.value = String(Math.round(opacity * 100));
+    if (output) output.textContent = `${Math.round(opacity * 100)}%`;
+  });
+}
+
+function updateMediaOpacity(key, value) {
+  profile[key] = clampPercent(value, DEFAULT_PROFILE[key]);
+  applyMediaOpacitySettings();
+  saveProfile();
+}
+
+function applyMusicPlayerSize() {
+  const player = $("profileMusic");
+  if (!player || player.classList.contains("is-docked")) return;
+  const width = Math.min(620, Math.max(220, Number(profile.musicPlayerWidth) || DEFAULT_PROFILE.musicPlayerWidth));
+  const height = Math.min(220, Math.max(56, Number(profile.musicPlayerHeight) || DEFAULT_PROFILE.musicPlayerHeight));
+  player.style.width = `${width}px`;
+  player.style.height = `${height}px`;
+}
+
+function applyMusicPlayerPosition() {
+  const player = $("profileMusic");
+  if (!player || !player.classList.contains("is-floating")) return;
+  const hasPosition = Number.isFinite(profile.musicPlayerX) && Number.isFinite(profile.musicPlayerY);
+  if (!hasPosition) {
+    player.style.left = "";
+    player.style.top = "";
+    player.style.right = "max(14px, env(safe-area-inset-right))";
+    player.style.bottom = "max(14px, env(safe-area-inset-bottom))";
+    return;
+  }
+  const rect = player.getBoundingClientRect();
+  const width = rect.width || profile.musicPlayerWidth || DEFAULT_PROFILE.musicPlayerWidth;
+  const height = rect.height || profile.musicPlayerHeight || DEFAULT_PROFILE.musicPlayerHeight;
+  const maxX = Math.max(8, window.innerWidth - width - 8);
+  const maxY = Math.max(8, window.innerHeight - height - 8);
+  profile.musicPlayerX = Math.min(maxX, Math.max(8, profile.musicPlayerX));
+  profile.musicPlayerY = Math.min(maxY, Math.max(8, profile.musicPlayerY));
+  player.style.left = `${profile.musicPlayerX}px`;
+  player.style.top = `${profile.musicPlayerY}px`;
+  player.style.right = "auto";
+  player.style.bottom = "auto";
+}
+
+function setupMusicPlayerResize() {
+  const player = $("profileMusic");
+  if (!player || !("ResizeObserver" in window)) return;
+  musicPlayerResizeObserver?.disconnect();
+  musicPlayerResizeObserver = new ResizeObserver((entries) => {
+    if (player.hidden || !player.classList.contains("is-floating")) return;
+    const entry = entries[0];
+    if (!entry) return;
+    const bounds = player.getBoundingClientRect();
+    const width = Math.round(bounds.width || entry.contentRect.width);
+    const height = Math.round(bounds.height || entry.contentRect.height);
+    if (width < 220 || height < 56) return;
+    profile.musicPlayerWidth = Math.min(620, width);
+    profile.musicPlayerHeight = Math.min(220, height);
+    applyMusicPlayerPosition();
+    clearTimeout(musicPlayerResizeTimer);
+    musicPlayerResizeTimer = setTimeout(saveProfile, 300);
+  });
+  musicPlayerResizeObserver.observe(player);
+}
+
+function setupMusicPlayerDrag() {
+  const player = $("profileMusic");
+  const handle = player?.querySelector(".music-player-top");
+  if (!player || !handle) return;
+
+  let dragState = null;
+  handle.addEventListener("pointerdown", (event) => {
+    if (!player.classList.contains("is-floating") || event.button !== 0 || event.target.closest("button")) return;
+    const rect = player.getBoundingClientRect();
+    dragState = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      left: rect.left,
+      top: rect.top,
+      moved: false
+    };
+    player.style.left = `${rect.left}px`;
+    player.style.top = `${rect.top}px`;
+    player.style.right = "auto";
+    player.style.bottom = "auto";
+    try { handle.setPointerCapture(event.pointerId); } catch {}
+    event.preventDefault();
+  });
+
+  handle.addEventListener("pointermove", (event) => {
+    if (!dragState || event.pointerId !== dragState.pointerId) return;
+    const rect = player.getBoundingClientRect();
+    const maxX = Math.max(8, window.innerWidth - rect.width - 8);
+    const maxY = Math.max(8, window.innerHeight - rect.height - 8);
+    const nextX = Math.min(maxX, Math.max(8, dragState.left + event.clientX - dragState.startX));
+    const nextY = Math.min(maxY, Math.max(8, dragState.top + event.clientY - dragState.startY));
+    if (Math.abs(event.clientX - dragState.startX) + Math.abs(event.clientY - dragState.startY) > 3) dragState.moved = true;
+    player.style.left = `${nextX}px`;
+    player.style.top = `${nextY}px`;
+    profile.musicPlayerX = nextX;
+    profile.musicPlayerY = nextY;
+  });
+
+  const finishDrag = (event) => {
+    if (!dragState || event.pointerId !== dragState.pointerId) return;
+    const moved = dragState.moved;
+    dragState = null;
+    if (moved) saveProfile();
+  };
+  handle.addEventListener("pointerup", finishDrag);
+  handle.addEventListener("pointercancel", finishDrag);
+  window.addEventListener("resize", () => {
+    applyMusicPlayerPosition();
+    if (player.classList.contains("is-floating")) saveProfile();
+  }, { passive: true });
+}
+
+function resetMusicPlayerPlacement() {
+  profile.musicPlayerWidth = DEFAULT_PROFILE.musicPlayerWidth;
+  profile.musicPlayerHeight = DEFAULT_PROFILE.musicPlayerHeight;
+  profile.musicPlayerX = null;
+  profile.musicPlayerY = null;
+  $("musicPlayerWidth").value = DEFAULT_PROFILE.musicPlayerWidth;
+  $("musicPlayerHeight").value = DEFAULT_PROFILE.musicPlayerHeight;
+  $("musicPlayerWidthValue").textContent = `${DEFAULT_PROFILE.musicPlayerWidth} px`;
+  $("musicPlayerHeightValue").textContent = `${DEFAULT_PROFILE.musicPlayerHeight} px`;
+  const player = $("profileMusic");
+  if (player?.classList.contains("is-floating")) {
+    applyMusicPlayerSize();
+    player.style.left = "";
+    player.style.top = "";
+    player.style.right = "max(14px, env(safe-area-inset-right))";
+    player.style.bottom = "max(14px, env(safe-area-inset-bottom))";
+  }
+  saveProfile();
+  showToast("Posição e tamanho originais restaurados.");
+}
+
+function clearMusicBarBackground() {
+  const image = $("musicBarBackgroundImage");
+  const video = $("musicBarBackgroundVideo");
+  if (image) { image.hidden = true; image.removeAttribute("src"); }
+  if (video) {
+    video.pause();
+    video.removeAttribute("src");
+    video.load();
+    video.hidden = true;
+  }
+  const name = $("musicBarBackgroundName");
+  if (name) name.textContent = "Nenhum fundo personalizado selecionado.";
+  applyMediaOpacitySettings();
+}
+
+function displayMusicBarBackground(file) {
+  // The decorative layer is independent from the audio/video track: never pause,
+  // replace or clear profileAudio/profileVideo while changing this background.
+  clearMusicBarBackground();
+  updateCropPreview("musicBarBackground", file);
+  revokeURL(musicBarBackgroundURL);
+  musicBarBackgroundURL = file ? URL.createObjectURL(file) : null;
+  if (!file || !musicBarBackgroundURL) {
+    const name = $("musicBarBackgroundName");
+    if (name) name.textContent = "Nenhum fundo personalizado selecionado.";
+    return;
+  }
+
+  if (getVisualMediaKind(file) === "video") {
+    const video = $("musicBarBackgroundVideo");
+    prepareVideo(video);
+    video.src = musicBarBackgroundURL;
+    video.hidden = false;
+  } else {
+    const image = $("musicBarBackgroundImage");
+    image.src = musicBarBackgroundURL;
+    image.hidden = false;
+  }
+  const name = $("musicBarBackgroundName");
+  if (name) name.textContent = `Fundo atual: ${file.name || "mídia personalizada"}`;
+  applyMediaOpacitySettings();
+  applyCropSettings();
+  applyCropPreviewStyle("musicBarBackground");
+  applyMediaPlayback();
+  // Reaffirm loop playback on the primary media without changing its source.
+  const activeMusic = getActiveMusicElement();
+  if (activeMusic && currentMusicFile) activeMusic.loop = true;
+}
+
 function applyBannerSettings() {
   const banner = document.querySelector(".banner");
   if (!banner) return;
@@ -1056,7 +1614,8 @@ function applyCropSettings() {
     avatar: [ $("avatarImage"), $("avatarVideo") ],
     banner: [ $("bannerImage"), $("bannerVideo") ],
     cardBackground: [ $("cardBackgroundImage"), $("cardBackgroundVideo") ],
-    background: [ $("backgroundImage"), $("backgroundVideo") ]
+    background: [ $("backgroundImage"), $("backgroundVideo") ],
+    musicBarBackground: [ $("musicBarBackgroundImage"), $("musicBarBackgroundVideo") ]
   };
 
   Object.entries(targets).forEach(([key, elements]) => {
@@ -1134,7 +1693,7 @@ function updateCropPreviewGeometry(key, media) {
   const sourceWidth = media.videoWidth || media.naturalWidth || 1;
   const sourceHeight = media.videoHeight || media.naturalHeight || 1;
   const sourceRatio = sourceWidth / sourceHeight;
-  const targetRatios = { avatar: 1, banner: 16 / 7, cardBackground: 16 / 9, background: 16 / 9 };
+  const targetRatios = { avatar: 1, banner: 16 / 7, cardBackground: 16 / 9, background: 16 / 9, musicBarBackground: 16 / 5 };
   const targetRatio = targetRatios[key] || 16 / 9;
   const crop = profile[`${key}Crop`] || { x: 50, y: 50, zoom: 100 };
   const zoom = crop.zoom / 100;
@@ -1184,46 +1743,51 @@ function resetCrop(key) {
   updateCropLabels(key);
   applyCropSettings();
   applyCropPreviewStyle(key);
+  saveProfile();
 }
 
 async function restoreMedia() {
-  const avatar = await getMedia("avatar");
-  const banner = await getMedia("banner");
-  const background = await getMedia("background");
-  const cardBackground = await getMedia("cardBackground");
-  const music = await getMedia("music");
-  const musicCover = await getMedia("musicCover");
+  const keys = ["avatar", "banner", "background", "cardBackground", "music", "musicCover", "musicBarBackground"];
+  const records = await Promise.all(keys.map(async (key) => {
+    try {
+      return await getMedia(key);
+    } catch (error) {
+      console.warn(`Não foi possível restaurar a mídia "${key}".`, error);
+      return null;
+    }
+  }));
+  const [avatar, banner, background, cardBackground, music, musicCover, musicBarBackground] = records;
 
   if (avatar) displayAvatar(avatar);
   if (banner) displayBanner(banner);
   if (background) displayBackground(background);
   if (cardBackground) displayCardBackground(cardBackground);
   if (musicCover) displayMusicCover(musicCover);
+  if (musicBarBackground) displayMusicBarBackground(musicBarBackground);
   if (music) displayMusic(music);
   applyMediaPlayback();
 }
 
 function applyMediaPlayback() {
-  const shouldPlay = profile.animarMidia !== false && document.visibilityState !== "hidden";
-  const videos = [
-    { element: $("avatarVideo"), paused: profile.avatarPausado },
-    { element: $("bannerVideo"), paused: profile.bannerPausado },
-    { element: $("backgroundVideo"), paused: profile.fundoPausado },
-    { element: $("cardBackgroundVideo"), paused: profile.cardBackgroundPausado }
-  ];
-
-  videos.forEach(({ element, paused }) => {
-    if (element.hidden || !element.src) return;
-    if (shouldPlay && !paused) {
-      element.play().catch(() => {});
-    } else {
-      element.pause();
-    }
+  VISUAL_VIDEO_CONFIG.forEach((config) => {
+    const element = $(config.id);
+    if (!element) return;
+    registerVisualVideo(element, config);
   });
+  syncVisualVideoPlayback();
 }
 
 function setMediaAnimation(enabled) {
   profile.animarMidia = enabled;
+  if (enabled) {
+    visualVideoStates.forEach((state) => {
+      state.autoplayBlocked = false;
+      state.mediaError = false;
+      state.errorNotified = false;
+      state.loadStarted = false;
+    });
+  }
+  saveProfile();
   applyMediaPlayback();
 }
 
@@ -1260,10 +1824,175 @@ function updateMusicButtons() {
   $("previewMusic").textContent = playing ? "Pausar mídia" : "Reproduzir / pausar";
 }
 
+function setCaptureMode(enabled) {
+  const next = Boolean(enabled);
+  if (next && $("editorModal")?.classList.contains("open")) closeEditor();
+  document.body.classList.toggle("capture-mode", next);
+  const button = $("toggleCaptureMode");
+  const exitButton = $("exitCaptureMode");
+  if (button) {
+    button.setAttribute("aria-pressed", String(next));
+    button.setAttribute("aria-label", next ? "Modo captura ativo" : "Ativar modo captura");
+    button.title = next ? "Modo captura ativo" : "Ativar modo captura";
+  }
+  if (exitButton) {
+    exitButton.setAttribute("aria-hidden", String(!next));
+    exitButton.tabIndex = next ? 0 : -1;
+  }
+  if (!next) showToast("Modo captura desativado.");
+}
+
+function resetThemeColor(key) {
+  if (!Object.prototype.hasOwnProperty.call(DEFAULT_PROFILE.cores, key)) return;
+  profile.cores[key] = DEFAULT_PROFILE.cores[key];
+  profile.tema = "custom";
+  applyColors({ [key]: DEFAULT_PROFILE.cores[key] });
+  fillColorInputs();
+  updateThemeButtons();
+  saveProfile();
+  showToast("Cor original restaurada.");
+}
+
+function resetFont() {
+  profile.fonte = DEFAULT_PROFILE.fonte;
+  $("fontFamily").value = DEFAULT_PROFILE.fonte;
+  document.documentElement.style.setProperty("--font", `"${DEFAULT_PROFILE.fonte}", sans-serif`);
+  saveProfile();
+  showToast("Tipografia original restaurada.");
+}
+
+function resetThemeColors() {
+  profile.tema = DEFAULT_PROFILE.tema;
+  profile.cores = structuredClone(DEFAULT_PROFILE.cores);
+  applyColors(profile.cores);
+  fillColorInputs();
+  updateThemeButtons();
+  saveProfile();
+  showToast("Cores originais restauradas.");
+}
+
+function resetVerifiedColor() {
+  profile.verificadoCor = DEFAULT_PROFILE.verificadoCor;
+  $("verifiedColor").value = DEFAULT_PROFILE.verificadoCor;
+  renderIdentity();
+  saveProfile();
+  showToast("Cor original do selo restaurada.");
+}
+
+function resetFrameAppearance() {
+  profile.moldura = DEFAULT_PROFILE.moldura;
+  profile.raridadeMoldura = DEFAULT_PROFILE.raridadeMoldura;
+  profile.molduraCorPersonalizada = DEFAULT_PROFILE.molduraCorPersonalizada;
+  profile.molduraCor = DEFAULT_PROFILE.molduraCor;
+  $("avatarFrameSelect").value = profile.moldura;
+  $("frameRarity").value = profile.raridadeMoldura;
+  $("customFrameColorEnabled").checked = false;
+  $("customFrameColor").value = profile.molduraCor;
+  $("customFrameColor").disabled = true;
+  renderFrame();
+  saveProfile();
+  showToast("Moldura original restaurada.");
+}
+
+function resetDividerAppearance() {
+  profile.dividerStyle = DEFAULT_PROFILE.dividerStyle;
+  profile.dividerCustomColorEnabled = DEFAULT_PROFILE.dividerCustomColorEnabled;
+  profile.dividerColor = DEFAULT_PROFILE.dividerColor;
+  $("dividerStyle").value = profile.dividerStyle;
+  $("dividerCustomColorEnabled").checked = profile.dividerCustomColorEnabled;
+  $("dividerColor").value = profile.dividerColor;
+  $("dividerColor").disabled = true;
+  applyDividerSettings();
+  saveProfile();
+  showToast("Divisória original restaurada.");
+}
+
+function resetProfileSetting(key) {
+  if (!(key in DEFAULT_PROFILE)) return;
+  profile[key] = DEFAULT_PROFILE[key];
+  const input = $(key);
+  if (input) input.value = String(DEFAULT_PROFILE[key]);
+  if (key === "bannerHeight") {
+    updateBannerRangeLabels();
+    applyBannerSettings();
+  } else if (key === "volume") {
+    $("musicVolume").value = DEFAULT_PROFILE.volume;
+    $("musicVolumeValue").textContent = `${DEFAULT_PROFILE.volume}%`;
+    $("profileAudio").volume = DEFAULT_PROFILE.volume / 100;
+    $("profileVideo").volume = DEFAULT_PROFILE.volume / 100;
+  } else if (["bannerOpacity", "cardBackgroundOpacity", "backgroundOpacity", "musicBarBackgroundOpacity"].includes(key)) {
+    applyMediaOpacitySettings();
+  } else if (["gradientIntensity", "cardRadius"].includes(key)) {
+    applyDesignSettings();
+  } else if (["musicPlayerWidth", "musicPlayerHeight"].includes(key)) {
+    applyMusicPlayerSize();
+    $("musicPlayerWidthValue").textContent = `${profile.musicPlayerWidth} px`;
+    $("musicPlayerHeightValue").textContent = `${profile.musicPlayerHeight} px`;
+  }
+  saveProfile();
+  showToast("Valor original restaurado.");
+}
+
+function resetAppearance() {
+  const keys = [
+    "tema", "gradientIntensity", "cardRadius", "verificadoCor", "bannerHeight",
+    "bannerOpacity", "cardBackgroundOpacity", "backgroundOpacity", "musicBarBackgroundOpacity",
+    "musicPlayerWidth", "musicPlayerHeight", "musicPlayerX", "musicPlayerY", "dividerStyle",
+    "dividerCustomColorEnabled", "dividerColor", "moldura", "raridadeMoldura",
+    "molduraCorPersonalizada", "molduraCor", "efeitosPerfil", "fonte", "volume",
+    "animarMidia", "avatarPausado", "bannerPausado", "fundoPausado", "cardBackgroundPausado"
+  ];
+  keys.forEach((key) => { profile[key] = structuredClone(DEFAULT_PROFILE[key]); });
+  profile.cores = structuredClone(DEFAULT_PROFILE.cores);
+  ["avatar", "banner", "cardBackground", "background", "musicBarBackground"].forEach((key) => {
+    profile[`${key}Crop`] = structuredClone(DEFAULT_PROFILE[`${key}Crop`]);
+  });
+  applyColors(profile.cores);
+  applyMediaOpacitySettings();
+  applyCropSettings();
+  applyBannerSettings();
+  applyDividerSettings();
+  renderFrame();
+  setMediaAnimation(true);
+  $("profileAudio").volume = DEFAULT_PROFILE.volume / 100;
+  $("profileVideo").volume = DEFAULT_PROFILE.volume / 100;
+  applyMusicPlayerSize();
+  const player = $("profileMusic");
+  if (player?.classList.contains("is-floating")) {
+    player.style.left = "";
+    player.style.top = "";
+    player.style.right = "max(14px, env(safe-area-inset-right))";
+    player.style.bottom = "max(14px, env(safe-area-inset-bottom))";
+  }
+  fillEditor();
+  renderProfile();
+  saveProfile();
+  showToast("Personalizações visuais restauradas sem apagar suas mídias.");
+}
+
 function setMusicPlayerPosition(docked) {
   const player = $("profileMusic");
+  if (docked && player.classList.contains("is-floating")) {
+    const width = Math.round(player.getBoundingClientRect().width);
+    const height = Math.round(player.getBoundingClientRect().height);
+    if (width >= 220) profile.musicPlayerWidth = Math.min(620, width);
+    if (height >= 56) profile.musicPlayerHeight = Math.min(220, height);
+    saveProfile();
+  }
+
   player.classList.toggle("is-docked", docked);
   player.classList.toggle("is-floating", !docked);
+  if (docked) {
+    player.style.width = "";
+    player.style.height = "";
+    player.style.left = "";
+    player.style.top = "";
+    player.style.right = "";
+    player.style.bottom = "";
+  } else {
+    applyMusicPlayerSize();
+    applyMusicPlayerPosition();
+  }
   $("dockMusic").textContent = docked ? "↗" : "⌄";
   $("dockMusic").title = docked ? "Fixar player no canto" : "Mover para o fim do perfil";
   $("dockMusic").setAttribute("aria-label", docked ? "Fixar player no canto" : "Mover player para o fim do perfil");
@@ -1274,10 +2003,11 @@ function displayMusicCover(file) {
   revokeURL(musicCoverURL);
   musicCoverURL = file ? URL.createObjectURL(file) : null;
   const image = $("musicCoverImage");
-  image.hidden = !musicCoverURL;
-  image.src = musicCoverURL || "";
-  $("musicCoverFallback").hidden = Boolean(musicCoverURL);
-  $("musicCoverName").textContent = file ? `Capa: ${file.name || "Capa personalizada"}` : "Nenhuma capa selecionada.";
+  const fallback = $("musicCoverFallback");
+  const name = $("musicCoverName");
+  if (image) { image.hidden = !musicCoverURL; image.src = musicCoverURL || ""; }
+  if (fallback) fallback.hidden = Boolean(musicCoverURL);
+  if (name) name.textContent = file ? `Capa: ${file.name || "Capa personalizada"}` : "Nenhuma capa selecionada.";
 }
 
 function displayMusic(file) {
@@ -1297,19 +2027,19 @@ function displayMusic(file) {
   video.load();
 
   if (isVideo) {
+    video.preload = "auto";
     video.src = musicURL;
     video.loop = true;
+    video.load();
     video.volume = profile.volume / 100;
-    video.hidden = false;
-    $("musicVideoFrame").hidden = false;
-    $("musicCaption").textContent = "VÍDEO DO PERFIL · LOOP";
+    video.hidden = true;
+    audio.removeAttribute("src");
   } else {
     audio.src = musicURL;
     audio.volume = profile.volume / 100;
     audio.loop = true;
-    $("musicVideoFrame").hidden = true;
     video.hidden = true;
-    $("musicCaption").textContent = "MÚSICA DO PERFIL · LOOP";
+    video.removeAttribute("src");
   }
 
   $("downloadMusic").disabled = false;
@@ -1335,6 +2065,7 @@ async function toggleMusic() {
       media.pause();
     }
     updateMusicButtons();
+    syncVisualVideoPlayback();
   } catch (error) {
     console.error("Falha ao reproduzir mídia:", error);
     showToast("Não foi possível reproduzir este arquivo neste navegador.");
@@ -1524,7 +2255,9 @@ function handleDetailsEditor(event) {
 
 function getSavedThemes() {
   try {
-    const saved = JSON.parse(localStorage.getItem(THEMES_STORAGE_KEY) || "[]");
+    const raw = localStorage.getItem(getThemesStorageKey()) ||
+      (ACTIVE_PROFILE_ID === "perfil-1" ? localStorage.getItem(THEMES_STORAGE_KEY) : null) || "[]";
+    const saved = JSON.parse(raw);
     return Array.isArray(saved) ? saved : [];
   } catch {
     return [];
@@ -1570,7 +2303,7 @@ function saveCurrentTheme() {
   });
 
   try {
-    localStorage.setItem(THEMES_STORAGE_KEY, JSON.stringify(themes));
+    localStorage.setItem(getThemesStorageKey(), JSON.stringify(themes));
     $("savedThemeName").value = "";
     renderSavedThemes();
     showToast("Tema salvo na biblioteca.");
@@ -1609,7 +2342,7 @@ function deleteSavedTheme() {
   }
 
   themes.splice(index, 1);
-  localStorage.setItem(THEMES_STORAGE_KEY, JSON.stringify(themes));
+  localStorage.setItem(getThemesStorageKey(), JSON.stringify(themes));
   renderSavedThemes();
   showToast("Tema excluído.");
 }
@@ -1664,6 +2397,7 @@ function fillEditor() {
   $("editBio").value = profile.bio;
   $("editRole").value = profile.cargo || "";
   $("editVerified").checked = profile.verificado;
+  $("verifiedColor").value = profile.verificadoCor || DEFAULT_PROFILE.verificadoCor;
   $("editBadges").value = profile.insignias.join(", ");
   $("editFooter").value = profile.rodape;
   $("bannerHeadingVisible").checked = profile.bannerHeadingVisible !== false;
@@ -1682,7 +2416,15 @@ function fillEditor() {
   $("pauseBanner").checked = profile.bannerPausado;
   $("pauseBackground").checked = profile.fundoPausado;
   $("pauseCardBackground").checked = profile.cardBackgroundPausado;
-  ["avatar", "banner", "cardBackground", "background"].forEach((key) => {
+  $("bannerOpacity").value = profile.bannerOpacity;
+  $("cardBackgroundOpacity").value = profile.cardBackgroundOpacity;
+  $("backgroundOpacity").value = profile.backgroundOpacity;
+  $("musicBarBackgroundOpacity").value = profile.musicBarBackgroundOpacity;
+  $("bannerOpacityValue").textContent = `${profile.bannerOpacity}%`;
+  $("cardBackgroundOpacityValue").textContent = `${profile.cardBackgroundOpacity}%`;
+  $("backgroundOpacityValue").textContent = `${profile.backgroundOpacity}%`;
+  $("musicBarBackgroundOpacityValue").textContent = `${profile.musicBarBackgroundOpacity}%`;
+  ["avatar", "banner", "cardBackground", "background", "musicBarBackground"].forEach((key) => {
     const crop = profile[`${key}Crop`] || { x: 50, y: 50, zoom: 100 };
     $(`${key}CropX`).value = crop.x;
     $(`${key}CropY`).value = crop.y;
@@ -1703,6 +2445,10 @@ function fillEditor() {
 
   $("musicVolume").value = profile.volume;
   $("musicVolumeValue").textContent = `${profile.volume}%`;
+  $("musicPlayerWidth").value = profile.musicPlayerWidth;
+  $("musicPlayerHeight").value = profile.musicPlayerHeight;
+  $("musicPlayerWidthValue").textContent = `${profile.musicPlayerWidth} px`;
+  $("musicPlayerHeightValue").textContent = `${profile.musicPlayerHeight} px`;
   $("gradientIntensity").value = profile.gradientIntensity ?? 55;
   $("cardRadius").value = profile.cardRadius ?? 18;
 
@@ -1713,7 +2459,7 @@ function fillEditor() {
 
   renderStatsEditor();
   renderDetailsEditor();
-  ["avatar", "banner", "cardBackground", "background"].forEach(applyCropPreviewStyle);
+  ["avatar", "banner", "cardBackground", "background", "musicBarBackground"].forEach(applyCropPreviewStyle);
   applyDividerSettings();
 
   updateThemeButtons();
@@ -1725,6 +2471,7 @@ function readIdentityEditor() {
   profile.bio = $("editBio").value.trim();
   profile.cargo = $("editRole").value;
   profile.verificado = $("editVerified").checked;
+  profile.verificadoCor = $("verifiedColor").value;
 
   profile.insignias = [...new Set($("editBadges").value
     .split(",")
@@ -1777,6 +2524,10 @@ function saveChanges() {
   applyBannerSettings();
   profile.fundoPausado = $("pauseBackground").checked;
   profile.cardBackgroundPausado = $("pauseCardBackground").checked;
+  profile.bannerOpacity = Number($("bannerOpacity").value);
+  profile.cardBackgroundOpacity = Number($("cardBackgroundOpacity").value);
+  profile.backgroundOpacity = Number($("backgroundOpacity").value);
+  profile.musicBarBackgroundOpacity = Number($("musicBarBackgroundOpacity").value);
   ["avatar", "banner", "cardBackground", "background"].forEach((key) => {
     profile[`${key}Crop`] = {
       x: Number($(`${key}CropX`).value),
@@ -1789,6 +2540,7 @@ function saveChanges() {
   profile.dividerColor = $("dividerColor").value;
   applyCropSettings();
   applyDividerSettings();
+  applyMediaOpacitySettings();
   profile.moldura = $("avatarFrameSelect").value;
   profile.raridadeMoldura = $("frameRarity").value;
   profile.molduraCorPersonalizada = $("customFrameColorEnabled").checked;
@@ -1835,7 +2587,8 @@ async function resetProfile() {
       deleteMedia("background"),
       deleteMedia("cardBackground"),
       deleteMedia("music"),
-      deleteMedia("musicCover")
+      deleteMedia("musicCover"),
+      deleteMedia("musicBarBackground")
     ]);
   } catch (error) {
     console.error("Erro ao remover mídias:", error);
@@ -1847,6 +2600,7 @@ async function resetProfile() {
   revokeURL(cardBackgroundURL);
   revokeURL(musicURL);
   revokeURL(musicCoverURL);
+  revokeURL(musicBarBackgroundURL);
 
   avatarURL = null;
   bannerURL = null;
@@ -1854,6 +2608,7 @@ async function resetProfile() {
   cardBackgroundURL = null;
   musicURL = null;
   musicCoverURL = null;
+  musicBarBackgroundURL = null;
   currentMusicFile = null;
   currentMusicCoverFile = null;
   musicMediaType = "audio";
@@ -1871,8 +2626,11 @@ async function resetProfile() {
   $("musicCoverImage").src = "";
   $("musicCoverImage").hidden = true;
   $("musicCoverFallback").hidden = false;
-  $("musicVideoFrame").hidden = true;
+  clearMusicBarBackground();
+  updateCropPreview("musicBarBackground", null);
   $("profileMusic").classList.remove("is-floating", "is-docked");
+  $("profileMusic").style.width = "";
+  $("profileMusic").style.height = "";
   $("musicToggle").hidden = false;
   $("profileMusic").hidden = true;
 
@@ -2095,6 +2853,53 @@ async function uploadMusicVideo(event) {
   }
 }
 
+async function uploadMusicBarBackground(event) {
+  const file = event.target.files?.[0];
+  if (!file) return;
+  const validation = validateVisualMedia(file);
+  if (!validation.valid) {
+    showToast(validation.message);
+    event.target.value = "";
+    return;
+  }
+  const activeMusic = getActiveMusicElement();
+  const wasPlaying = Boolean(activeMusic && !activeMusic.paused);
+  const activeMusicSource = activeMusic?.currentSrc || activeMusic?.src || "";
+  const activeMusicTime = activeMusic?.currentTime || 0;
+  try {
+    await saveMedia("musicBarBackground", file);
+    displayMusicBarBackground(file);
+    // Defensive recovery for browsers that pause media while a file picker is open.
+    if (activeMusic && currentMusicFile && activeMusicSource && (activeMusic.currentSrc || activeMusic.src) === activeMusicSource) {
+      if (Number.isFinite(activeMusicTime) && activeMusic.duration && activeMusicTime < activeMusic.duration) activeMusic.currentTime = activeMusicTime;
+      if (wasPlaying && activeMusic.paused) activeMusic.play().catch(() => {});
+    }
+    showToast("Fundo da faixa atualizado sem alterar a música.");
+  } catch (error) {
+    console.error("Falha ao salvar o fundo da faixa:", error);
+    showToast("Não foi possível salvar o fundo. Verifique o espaço disponível no navegador.");
+  } finally {
+    event.target.value = "";
+  }
+}
+
+async function removeMusicBarBackground() {
+  try {
+    await deleteMedia("musicBarBackground");
+    revokeURL(musicBarBackgroundURL);
+    musicBarBackgroundURL = null;
+    clearMusicBarBackground();
+    updateCropPreview("musicBarBackground", null);
+    resetCrop("musicBarBackground");
+    const name = $("musicBarBackgroundName");
+    if (name) name.textContent = "Nenhum fundo personalizado selecionado.";
+    showToast("Fundo da faixa removido.");
+  } catch (error) {
+    console.error(error);
+    showToast("Não foi possível remover o fundo da faixa.");
+  }
+}
+
 async function uploadMusicCover(event) {
   const file = event.target.files?.[0];
   if (!file) return;
@@ -2153,7 +2958,7 @@ function dataURLToBlob(dataURL) {
 async function exportProfileBackup() {
   try {
     const media = {};
-    for (const key of ["avatar", "banner", "background", "cardBackground", "music", "musicCover"]) {
+    for (const key of ["avatar", "banner", "background", "cardBackground", "music", "musicCover", "musicBarBackground"]) {
       const file = await getMedia(key);
       media[key] = file ? await blobToDataURL(file) : null;
     }
@@ -2206,7 +3011,7 @@ async function importProfileBackup(event) {
     if (/\b(owner|dono|admin|administrator|dev|developer|staff|moderator)\b/i.test(String(profile.cargo || ""))) profile.cargo = "";
     profile.insignias = [...new Set(profile.insignias.map(normalizeBadge).filter((badge) => badge && !isBlockedBadge(badge)))];
 
-    for (const key of ["avatar", "banner", "background", "cardBackground", "music", "musicCover"]) {
+    for (const key of ["avatar", "banner", "background", "cardBackground", "music", "musicCover", "musicBarBackground"]) {
       const value = backup.media?.[key];
       if (typeof value === "string" && value.startsWith("data:")) {
         await saveMedia(key, dataURLToBlob(value));
@@ -2221,7 +3026,8 @@ async function importProfileBackup(event) {
     revokeURL(cardBackgroundURL);
     revokeURL(musicURL);
     revokeURL(musicCoverURL);
-    avatarURL = bannerURL = backgroundURL = cardBackgroundURL = musicURL = musicCoverURL = null;
+    revokeURL(musicBarBackgroundURL);
+    avatarURL = bannerURL = backgroundURL = cardBackgroundURL = musicURL = musicCoverURL = musicBarBackgroundURL = null;
     currentMusicFile = null;
     currentMusicCoverFile = null;
     musicMediaType = "audio";
@@ -2244,6 +3050,19 @@ async function importProfileBackup(event) {
 }
 
 function setupEvents() {
+  $("openOtherProfile").addEventListener("click", openOtherProfile);
+  $("toggleCaptureMode").addEventListener("click", () => setCaptureMode(true));
+  $("exitCaptureMode").addEventListener("click", () => setCaptureMode(false));
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && document.body.classList.contains("capture-mode")) {
+      setCaptureMode(false);
+      return;
+    }
+    if (event.altKey && event.shiftKey && event.key.toLowerCase() === "p") {
+      event.preventDefault();
+      setCaptureMode(!document.body.classList.contains("capture-mode"));
+    }
+  });
   $("openEditor").addEventListener("click", openEditor);
   $("closeEditor").addEventListener("click", closeEditor);
 
@@ -2268,8 +3087,41 @@ function setupEvents() {
     });
   });
 
+  $("verifiedColor").addEventListener("input", (event) => {
+    profile.verificadoCor = event.target.value;
+    renderIdentity();
+    saveProfile();
+  });
+
   $("saveProfile").addEventListener("click", saveChanges);
   $("resetProfile").addEventListener("click", resetProfile);
+  $("resetAppearance").addEventListener("click", () => {
+    if (confirm("Restaurar cores, transparências, enquadramentos e demais ajustes visuais? Seus arquivos e textos serão preservados.")) resetAppearance();
+  });
+  $("resetThemeColors").addEventListener("click", resetThemeColors);
+  document.querySelectorAll("[data-reset-color]").forEach((button) => {
+    button.addEventListener("click", () => resetThemeColor(button.dataset.resetColor));
+  });
+  $("resetFont").addEventListener("click", resetFont);
+  $("resetVerifiedColor").addEventListener("click", resetVerifiedColor);
+  $("resetFrameAppearance").addEventListener("click", resetFrameAppearance);
+  $("resetDividerAppearance").addEventListener("click", resetDividerAppearance);
+  $("resetMusicPlayerPlacement").addEventListener("click", resetMusicPlayerPlacement);
+  $("musicPlayerWidth").addEventListener("input", (event) => {
+    profile.musicPlayerWidth = Number(event.target.value);
+    $("musicPlayerWidthValue").textContent = `${profile.musicPlayerWidth} px`;
+    applyMusicPlayerSize();
+    saveProfile();
+  });
+  $("musicPlayerHeight").addEventListener("input", (event) => {
+    profile.musicPlayerHeight = Number(event.target.value);
+    $("musicPlayerHeightValue").textContent = `${profile.musicPlayerHeight} px`;
+    applyMusicPlayerSize();
+    saveProfile();
+  });
+  document.querySelectorAll("[data-reset-setting]").forEach((button) => {
+    button.addEventListener("click", () => resetProfileSetting(button.dataset.resetSetting));
+  });
   $("exportProfile").addEventListener("click", exportProfileBackup);
   $("importProfile").addEventListener("click", () => $("importProfileFile").click());
   $("importProfileFile").addEventListener("change", importProfileBackup);
@@ -2289,14 +3141,14 @@ function setupEvents() {
   $("cardBackgroundUpload").addEventListener("change", uploadCardBackground);
   $("musicUpload").addEventListener("change", uploadMusic);
   $("musicVideoUpload").addEventListener("change", uploadMusicVideo);
-  $("musicCoverUpload").addEventListener("change", uploadMusicCover);
+  $("musicBarBackgroundUpload").addEventListener("change", uploadMusicBarBackground);
+  $("removeMusicBarBackground").addEventListener("click", removeMusicBarBackground);
 
   $("removeAvatar").addEventListener("click", removeAvatar);
   $("removeBanner").addEventListener("click", removeBanner);
   $("removeBackground").addEventListener("click", removeBackground);
   $("removeCardBackground").addEventListener("click", removeCardBackground);
   $("removeMusic").addEventListener("click", removeMusic);
-  $("removeMusicCover").addEventListener("click", removeMusicCover);
 
   $("animateMedia").addEventListener("change", (event) => {
     setMediaAnimation(event.target.checked);
@@ -2330,7 +3182,11 @@ function setupEvents() {
     applyMediaPlayback();
   });
 
-  ["avatar", "banner", "cardBackground", "background"].forEach((key) => {
+  ["bannerOpacity", "cardBackgroundOpacity", "backgroundOpacity", "musicBarBackgroundOpacity"].forEach((key) => {
+    $(key).addEventListener("input", (event) => updateMediaOpacity(key, event.target.value));
+  });
+
+  ["avatar", "banner", "cardBackground", "background", "musicBarBackground"].forEach((key) => {
     ["X", "Y", "Zoom"].forEach((axis) => {
       $(`${key}Crop${axis}`).addEventListener("input", (event) => {
         const property = axis.toLowerCase();
@@ -2394,6 +3250,13 @@ function setupEvents() {
         updateMusicTimeline();
       });
     });
+  });
+  $("profileVideo").addEventListener("error", () => {
+    const code = $("profileVideo").error?.code;
+    const detail = code === 3 || code === 4
+      ? "O codec não é compatível. Converta o vídeo para MP4 H.264."
+      : "O navegador não conseguiu abrir este vídeo.";
+    showToast(detail);
   });
 
   $("musicVolume").addEventListener("input", (event) => {
@@ -2465,6 +3328,13 @@ async function init() {
   $("musicVolumeValue").textContent = `${profile.volume}%`;
 
   setupEvents();
+  setupMusicPlayerResize();
+  setupMusicPlayerDrag();
+  applyMediaOpacitySettings();
+  updateProfileSwitcher();
+  applyMusicPlayerSize();
+  applyMusicPlayerPosition();
+  document.title = ACTIVE_PROFILE_ID === "perfil-1" ? "Hättz — Perfil 1" : "Hättz — Perfil 2";
   renderProfile();
   fillEditor();
 
@@ -2472,8 +3342,10 @@ async function init() {
 }
 
 document.addEventListener("visibilitychange", applyMediaPlayback);
+window.addEventListener("scroll", queueVisualVideoSync, { passive: true });
+window.addEventListener("resize", queueVisualVideoSync, { passive: true });
 document.addEventListener("pagehide", () => {
-  ["avatarVideo", "bannerVideo", "backgroundVideo", "cardBackgroundVideo", "profileAudio", "profileVideo"].forEach((id) => $(id)?.pause());
+  ["avatarVideo", "bannerVideo", "backgroundVideo", "cardBackgroundVideo", "musicBarBackgroundVideo", "profileAudio", "profileVideo"].forEach((id) => $(id)?.pause());
 });
 document.addEventListener("pageshow", applyMediaPlayback);
 document.addEventListener("DOMContentLoaded", init);

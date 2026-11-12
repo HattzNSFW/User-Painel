@@ -103,14 +103,25 @@
           <div class="details-grid" id="detailsGrid"></div>
         </section>
 
-        <section class="music-player" id="profileMusic" hidden>
-          <div class="music-cover">♫</div>
-          <div class="music-info">
-            <span class="music-caption">TOCANDO NO PERFIL</span>
-            <strong id="musicTrackName">Minha música</strong>
+        <section class="music-player" id="profileMusic" hidden aria-label="Player de música e vídeo">
+          <div class="music-player-top">
+            <div class="music-cover" id="musicCover">
+              <img id="musicCoverImage" alt="Capa da mídia" hidden>
+              <span id="musicCoverFallback" aria-hidden="true">♫</span>
+            </div>
+            <div class="music-info">
+              <span class="music-caption" id="musicCaption">TOCANDO NO PERFIL</span>
+              <strong id="musicTrackName">Minha música</strong>
+              <span class="music-time" id="musicTime">0:00 / 0:00</span>
+            </div>
+            <button class="music-play" id="musicToggle" type="button" aria-label="Reproduzir ou pausar" title="Reproduzir">▶</button>
+            <button class="music-dock" id="dockMusic" type="button" aria-label="Mover player para o fim do perfil" title="Mover para o fim do perfil">⌄</button>
           </div>
-          <button class="music-play" id="musicToggle" aria-label="Reproduzir ou pausar">▶</button>
-          <audio id="profileAudio" loop preload="metadata"></audio>
+          <div class="music-progress" aria-hidden="true"><span id="musicProgressFill"></span></div>
+          <div class="music-video-frame" id="musicVideoFrame" hidden>
+            <video id="profileVideo" playsinline loop preload="metadata"></video>
+          </div>
+          <audio id="profileAudio" loop preload="metadata" hidden></audio>
         </section>
 
         <footer class="profile-footer">
@@ -431,17 +442,31 @@
           </label>
 
           <div class="field-group music-settings">
-            <label>Música do perfil</label>
+            <label>Música e vídeo do perfil</label>
             <label class="upload-box" for="musicUpload">
               <span class="upload-symbol">♫</span>
-              <span><strong>Selecionar arquivo de áudio</strong><small>MP3, WAV, OGG, M4A, AAC e FLAC (conforme o navegador)</small></span>
+              <span><strong>Selecionar arquivo de áudio</strong><small>MP3, WAV, OGG, M4A, AAC e FLAC</small></span>
             </label>
-            <input type="file" id="musicUpload" accept="audio/*,.mp3,.wav,.ogg,.m4a,.aac,.flac" hidden>
-            <p class="field-hint">A música fica armazenada neste navegador e aparece no player do perfil. Para usar uma música de outra plataforma, baixe o arquivo por meios autorizados e envie aqui.</p>
+            <input type="file" id="musicUpload" accept="audio/*,.mp3,.wav,.ogg,.m4a,.aac,.flac,.opus" hidden>
+            <label class="upload-box" for="musicVideoUpload">
+              <span class="upload-symbol">▣</span>
+              <span><strong>Selecionar vídeo</strong><small>MP4, WebM, MOV e OGG vídeo (conforme o navegador)</small></span>
+            </label>
+            <input type="file" id="musicVideoUpload" accept="video/mp4,video/webm,video/quicktime,video/ogg,.mp4,.webm,.mov,.ogv,.m4v" hidden>
+            <label class="upload-box music-cover-upload" for="musicCoverUpload">
+              <span class="upload-symbol">▧</span>
+              <span><strong>Adicionar capa</strong><small>Imagem opcional para identificar a faixa</small></span>
+            </label>
+            <input type="file" id="musicCoverUpload" accept="image/png,image/jpeg,image/webp,image/gif,.png,.jpg,.jpeg,.webp,.gif" hidden>
+            <p class="field-hint" id="musicLocalStatus">Os arquivos ficam salvos somente neste navegador. A reprodução é em loop; use o player flutuante para controlar a mídia.</p>
+            <p class="music-cover-name" id="musicCoverName">Nenhuma capa selecionada.</p>
+            <a class="text-button music-external-link" href="https://savetheclip.app/pt/download-video-from-link" target="_blank" rel="noopener noreferrer">↗ Abrir conversor externo de links (MP4 / MP3)</a>
+            <p class="field-hint">O conversor abre em outra aba. Use apenas conteúdo que você tenha direito ou autorização para salvar.</p>
             <div class="music-actions">
               <button class="text-button" id="previewMusic" type="button">Reproduzir / pausar</button>
               <button class="text-button" id="downloadMusic" type="button" disabled>Baixar arquivo original</button>
-              <button class="text-button danger" id="removeMusic" type="button">Remover música</button>
+              <button class="text-button danger" id="removeMusic" type="button">Remover mídia</button>
+              <button class="text-button danger" id="removeMusicCover" type="button">Remover capa</button>
             </div>
             <label class="range-label" for="musicVolume">Volume <span id="musicVolumeValue">12%</span></label>
             <input type="range" id="musicVolume" min="0" max="100" value="12">

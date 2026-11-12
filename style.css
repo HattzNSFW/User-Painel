@@ -2892,3 +2892,199 @@ textarea:focus-visible,
     gap: 10px;
   }
 }
+
+
+/* Player de mídia: notificação flutuante e modo recolhido */
+.music-player {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+  margin: 24px 0 18px;
+  padding: 13px;
+  border: 1px solid color-mix(in srgb, var(--text) 19%, transparent);
+  border-radius: 17px;
+  background: color-mix(in srgb, var(--card) 76%, transparent);
+  color: var(--text);
+  box-shadow: 0 12px 38px #0005;
+  backdrop-filter: blur(22px) saturate(145%);
+  -webkit-backdrop-filter: blur(22px) saturate(145%);
+}
+
+.music-player.is-floating {
+  position: fixed;
+  z-index: 1000;
+  right: max(18px, env(safe-area-inset-right));
+  bottom: max(18px, env(safe-area-inset-bottom));
+  width: min(370px, calc(100vw - 28px));
+  margin: 0;
+  background: color-mix(in srgb, var(--card) 66%, transparent);
+  border-color: color-mix(in srgb, var(--text) 24%, transparent);
+  box-shadow: 0 18px 54px #0008, inset 0 1px 0 #ffffff18;
+  animation: music-notice-in .28s ease both;
+}
+
+.music-player.is-docked {
+  position: relative;
+  right: auto;
+  bottom: auto;
+  z-index: auto;
+  width: 100%;
+  margin: 24px 0 18px;
+  background: color-mix(in srgb, var(--accent) 8%, var(--card));
+  animation: none;
+}
+
+.music-player-top {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  min-width: 0;
+}
+
+.music-cover {
+  position: relative;
+  flex: 0 0 48px;
+  width: 48px;
+  height: 48px;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--accent) 38%, transparent);
+  border-radius: 12px;
+  background: linear-gradient(145deg, color-mix(in srgb, var(--accent) 36%, var(--card)), var(--card));
+  color: var(--accent);
+  font-size: 21px;
+}
+
+.music-cover img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.music-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.music-caption {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--muted);
+  font-size: 8px;
+  letter-spacing: 1.15px;
+}
+
+.music-info strong {
+  display: block;
+  overflow: hidden;
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.music-time {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.music-play,
+.music-dock {
+  flex: 0 0 34px;
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  transition: transform .2s ease, background .2s ease;
+}
+
+.music-play {
+  background: var(--accent);
+  color: #17121f;
+  font-size: 11px;
+}
+
+.music-dock {
+  background: color-mix(in srgb, var(--text) 9%, transparent);
+  color: var(--text);
+  font-size: 17px;
+}
+
+.music-play:hover,
+.music-dock:hover { transform: translateY(-1px); }
+
+.music-progress {
+  width: 100%;
+  height: 3px;
+  overflow: hidden;
+  border-radius: 99px;
+  background: color-mix(in srgb, var(--text) 13%, transparent);
+}
+
+.music-progress span {
+  display: block;
+  width: 0;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+  transition: width .12s linear;
+}
+
+.music-video-frame {
+  overflow: hidden;
+  width: 100%;
+  max-height: 190px;
+  border: 1px solid color-mix(in srgb, var(--text) 12%, transparent);
+  border-radius: 12px;
+  background: #000;
+}
+
+.music-video-frame video {
+  display: block;
+  width: 100%;
+  max-height: 190px;
+  aspect-ratio: 16 / 9;
+  object-fit: contain;
+  background: #000;
+}
+
+.music-external-link {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  text-decoration: none;
+}
+
+.music-cover-name {
+  color: var(--muted);
+  font-size: 10px;
+  overflow-wrap: anywhere;
+}
+
+@keyframes music-notice-in {
+  from { opacity: 0; transform: translate3d(0, 10px, 0) scale(.98); }
+  to { opacity: 1; transform: translate3d(0, 0, 0) scale(1); }
+}
+
+@media (max-width: 600px) {
+  .music-player.is-floating {
+    right: 12px;
+    bottom: max(12px, env(safe-area-inset-bottom));
+    width: calc(100vw - 24px);
+  }
+  .music-video-frame,
+  .music-video-frame video { max-height: 150px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .music-player.is-floating { animation: none; }
+}

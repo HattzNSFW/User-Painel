@@ -110,6 +110,9 @@ let backgroundURL = null;
 let cardBackgroundURL = null;
 let musicURL = null;
 let currentMusicFile = null;
+let musicCoverURL = null;
+let currentMusicCoverFile = null;
+let musicMediaType = "audio";
 let toastTimer = null;
 
 function openDatabase() {
@@ -1189,11 +1192,13 @@ async function restoreMedia() {
   const background = await getMedia("background");
   const cardBackground = await getMedia("cardBackground");
   const music = await getMedia("music");
+  const musicCover = await getMedia("musicCover");
 
   if (avatar) displayAvatar(avatar);
   if (banner) displayBanner(banner);
   if (background) displayBackground(background);
   if (cardBackground) displayCardBackground(cardBackground);
+  if (musicCover) displayMusicCover(musicCover);
   if (music) displayMusic(music);
   applyMediaPlayback();
 }
@@ -1222,56 +1227,159 @@ function setMediaAnimation(enabled) {
   applyMediaPlayback();
 }
 
-function displayMusic(file) {
-  currentMusicFile = file;
-  revokeURL(musicURL);
-  musicURL = URL.createObjectURL(file);
-  const audio = $("profileAudio");
-  audio.src = musicURL;
-  audio.volume = profile.volume / 100;
-  audio.loop = true;
-  $("downloadMusic").disabled = false;
-  $("downloadMusic").textContent = "Baixar arquivo original";
-  $("musicTrackName").textContent = file.name.replace(/\.[^/.]+$/, "");
-  $("profileMusic").hidden = false;
-  $("musicToggle").textContent = "▶";
+function getActiveMusicElement() {
+  return musicMediaType === "video" ? $("profileVideo") : $("profileAudio");
 }
 
-function toggleMusic() {
+function formatMediaTime(value) {
+  if (!Number.isFinite(value) || value < 0) return "0:00";
+  const total = Math.floor(value);
+  const hours = Math.floor(total / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+  const seconds = total % 60;
+  return hours > 0
+    ? `${hours}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`
+    : `${minutes}:${String(seconds).padStart(2, "0")}`;
+}
+
+function updateMusicTimeline() {
+  const media = getActiveMusicElement();
+  if (!media) return;
+  const duration = Number.isFinite(media.duration) ? media.duration : 0;
+  const current = Number.isFinite(media.currentTime) ? media.currentTime : 0;
+  const percent = duration > 0 ? Math.min(100, (current / duration) * 100) : 0;
+  $("musicTime").textContent = `${formatMediaTime(current)} / ${formatMediaTime(duration)}`;
+  $("musicProgressFill").style.width = `${percent}%`;
+}
+
+function updateMusicButtons() {
+  const media = getActiveMusicElement();
+  const playing = Boolean(media && !media.paused);
+  $("musicToggle").textContent = playing ? "Ⅱ" : "▶";
+  $("musicToggle").title = playing ? "Pausar" : "Reproduzir";
+  $("previewMusic").textContent = playing ? "Pausar mídia" : "Reproduzir / pausar";
+}
+
+function setMusicPlayerPosition(docked) {
+  const player = $("profileMusic");
+  player.classList.toggle("is-docked", docked);
+  player.classList.toggle("is-floating", !docked);
+  $("dockMusic").textContent = docked ? "↗" : "⌄";
+  $("dockMusic").title = docked ? "Fixar player no canto" : "Mover para o fim do perfil";
+  $("dockMusic").setAttribute("aria-label", docked ? "Fixar player no canto" : "Mover player para o fim do perfil");
+}
+
+function displayMusicCover(file) {
+  currentMusicCoverFile = file || null;
+  revokeURL(musicCoverURL);
+  musicCoverURL = file ? URL.createObjectURL(file) : null;
+  const image = $("musicCoverImage");
+  image.hidden = !musicCoverURL;
+  image.src = musicCoverURL || "";
+  $("musicCoverFallback").hidden = Boolean(musicCoverURL);
+  $("musicCoverName").textContent = file ? `Capa: ${file.name || "Capa personalizada"}` : "Nenhuma capa selecionada.";
+}
+
+function displayMusic(file) {
+  currentMusicFile = file;
+  const isVideo = file.type?.startsWith("video/") || /\.(mp4|webm|mov|ogv|m4v)$/i.test(file.name || "");
+  musicMediaType = isVideo ? "video" : "audio";
+  revokeURL(musicURL);
+  musicURL = URL.createObjectURL(file);
+
   const audio = $("profileAudio");
-  if (!audio.src) {
-    showToast("Adicione uma música primeiro.");
+  const video = $("profileVideo");
+  audio.pause();
+  video.pause();
+  audio.removeAttribute("src");
+  video.removeAttribute("src");
+  audio.load();
+  video.load();
+
+  if (isVideo) {
+    video.src = musicURL;
+    video.loop = true;
+    video.volume = profile.volume / 100;
+    video.hidden = false;
+    $("musicVideoFrame").hidden = false;
+    $("musicCaption").textContent = "VÍDEO DO PERFIL · LOOP";
+  } else {
+    audio.src = musicURL;
+    audio.volume = profile.volume / 100;
+    audio.loop = true;
+    $("musicVideoFrame").hidden = true;
+    video.hidden = true;
+    $("musicCaption").textContent = "MÚSICA DO PERFIL · LOOP";
+  }
+
+  $("downloadMusic").disabled = false;
+  $("downloadMusic").textContent = "Baixar arquivo original";
+  $("musicTrackName").textContent = (file.name || (isVideo ? "Meu vídeo" : "Minha música")).replace(/\.[^/.]+$/, "");
+  $("profileMusic").hidden = false;
+  setMusicPlayerPosition(false);
+  updateMusicButtons();
+  updateMusicTimeline();
+}
+
+async function toggleMusic() {
+  const media = getActiveMusicElement();
+  if (!currentMusicFile || !media?.src) {
+    showToast("Adicione uma música ou vídeo primeiro.");
     return;
   }
-  if (audio.paused) {
-    audio.play().then(() => {
-      $("musicToggle").textContent = "Ⅱ";
-    }).catch(() => showToast("Não foi possível reproduzir este arquivo."));
-  } else {
-    audio.pause();
-    $("musicToggle").textContent = "▶";
+  try {
+    if (media.paused) {
+      media.loop = true;
+      await media.play();
+    } else {
+      media.pause();
+    }
+    updateMusicButtons();
+  } catch (error) {
+    console.error("Falha ao reproduzir mídia:", error);
+    showToast("Não foi possível reproduzir este arquivo neste navegador.");
   }
 }
 
 async function removeMusic() {
   try {
-    await deleteMedia("music");
+    await Promise.all([deleteMedia("music"), deleteMedia("musicCover")]);
   } catch (error) {
-    console.error("Erro ao remover música:", error);
-    showToast("Não foi possível remover a música.");
+    console.error("Erro ao remover mídia:", error);
+    showToast("Não foi possível remover a mídia.");
     return;
   }
+
   const audio = $("profileAudio");
-  audio.pause();
-  audio.removeAttribute("src");
-  audio.load();
+  const video = $("profileVideo");
+  [audio, video].forEach((media) => {
+    media.pause();
+    media.removeAttribute("src");
+    media.load();
+  });
+
   currentMusicFile = null;
+  musicMediaType = "audio";
   revokeURL(musicURL);
   musicURL = null;
+  displayMusicCover(null);
   $("downloadMusic").disabled = true;
   $("profileMusic").hidden = true;
+  $("profileMusic").classList.remove("is-floating", "is-docked");
   $("musicToggle").textContent = "▶";
-  showToast("Música removida.");
+  updateMusicTimeline();
+  showToast("Mídia removida.");
+}
+
+async function removeMusicCover() {
+  try {
+    await deleteMedia("musicCover");
+    displayMusicCover(null);
+    showToast("Capa removida.");
+  } catch (error) {
+    console.error(error);
+    showToast("Não foi possível remover a capa.");
+  }
 }
 
 function renderStatsEditor() {
@@ -1700,6 +1808,7 @@ function saveChanges() {
   );
 
   $("profileAudio").volume = profile.volume / 100;
+  $("profileVideo").volume = profile.volume / 100;
 
   setMediaAnimation(profile.animarMidia);
 
@@ -1725,7 +1834,8 @@ async function resetProfile() {
       deleteMedia("banner"),
       deleteMedia("background"),
       deleteMedia("cardBackground"),
-      deleteMedia("music")
+      deleteMedia("music"),
+      deleteMedia("musicCover")
     ]);
   } catch (error) {
     console.error("Erro ao remover mídias:", error);
@@ -1736,12 +1846,17 @@ async function resetProfile() {
   revokeURL(backgroundURL);
   revokeURL(cardBackgroundURL);
   revokeURL(musicURL);
+  revokeURL(musicCoverURL);
 
   avatarURL = null;
   bannerURL = null;
   backgroundURL = null;
   cardBackgroundURL = null;
   musicURL = null;
+  musicCoverURL = null;
+  currentMusicFile = null;
+  currentMusicCoverFile = null;
+  musicMediaType = "audio";
 
   clearAvatar();
   clearBanner();
@@ -1750,6 +1865,14 @@ async function resetProfile() {
 
   $("profileAudio").pause();
   $("profileAudio").removeAttribute("src");
+  $("profileVideo").pause();
+  $("profileVideo").removeAttribute("src");
+  $("profileVideo").load();
+  $("musicCoverImage").src = "";
+  $("musicCoverImage").hidden = true;
+  $("musicCoverFallback").hidden = false;
+  $("musicVideoFrame").hidden = true;
+  $("profileMusic").classList.remove("is-floating", "is-docked");
   $("musicToggle").hidden = false;
   $("profileMusic").hidden = true;
 
@@ -1915,8 +2038,7 @@ async function removeCardBackground() {
 }
 
 async function uploadMusic(event) {
-  const file = event.target.files[0];
-
+  const file = event.target.files?.[0];
   if (!file) return;
 
   const audioExtension = /\.(mp3|wav|ogg|m4a|aac|flac|opus)$/i.test(file.name);
@@ -1925,8 +2047,8 @@ async function uploadMusic(event) {
     event.target.value = "";
     return;
   }
-  if (file.size > 100 * 1024 * 1024) {
-    showToast("A música ultrapassa o limite de 100 MB.");
+  if (file.size > 150 * 1024 * 1024) {
+    showToast("O áudio ultrapassa o limite de 150 MB.");
     event.target.value = "";
     return;
   }
@@ -1934,10 +2056,67 @@ async function uploadMusic(event) {
   try {
     await saveMedia("music", file);
     displayMusic(file);
+    $("musicLocalStatus").textContent = "Áudio salvo somente neste navegador. A reprodução está configurada em loop.";
     showToast("Música adicionada ao perfil.");
   } catch (error) {
     console.error("Falha ao salvar música:", error);
     showToast("Não foi possível salvar. Verifique o espaço disponível no navegador.");
+  } finally {
+    event.target.value = "";
+  }
+}
+
+async function uploadMusicVideo(event) {
+  const file = event.target.files?.[0];
+  if (!file) return;
+
+  const videoExtension = /\.(mp4|webm|mov|ogv|m4v)$/i.test(file.name);
+  if (!file.type.startsWith("video/") && !videoExtension) {
+    showToast("Escolha um vídeo MP4, WebM, MOV ou OGG compatível.");
+    event.target.value = "";
+    return;
+  }
+  if (file.size > 250 * 1024 * 1024) {
+    showToast("O vídeo ultrapassa o limite de 250 MB.");
+    event.target.value = "";
+    return;
+  }
+
+  try {
+    await saveMedia("music", file);
+    displayMusic(file);
+    $("musicLocalStatus").textContent = "Vídeo salvo somente neste navegador. O player reproduz o vídeo e o áudio em loop.";
+    showToast("Vídeo adicionado ao player do perfil.");
+  } catch (error) {
+    console.error("Falha ao salvar vídeo:", error);
+    showToast("Não foi possível salvar. Verifique o espaço disponível no navegador.");
+  } finally {
+    event.target.value = "";
+  }
+}
+
+async function uploadMusicCover(event) {
+  const file = event.target.files?.[0];
+  if (!file) return;
+
+  if (!file.type.startsWith("image/")) {
+    showToast("Escolha uma imagem para a capa.");
+    event.target.value = "";
+    return;
+  }
+  if (file.size > 15 * 1024 * 1024) {
+    showToast("A capa ultrapassa o limite de 15 MB.");
+    event.target.value = "";
+    return;
+  }
+
+  try {
+    await saveMedia("musicCover", file);
+    displayMusicCover(file);
+    showToast("Capa adicionada.");
+  } catch (error) {
+    console.error("Falha ao salvar capa:", error);
+    showToast("Não foi possível salvar a capa neste navegador.");
   } finally {
     event.target.value = "";
   }
@@ -1974,7 +2153,7 @@ function dataURLToBlob(dataURL) {
 async function exportProfileBackup() {
   try {
     const media = {};
-    for (const key of ["avatar", "banner", "background", "cardBackground", "music"]) {
+    for (const key of ["avatar", "banner", "background", "cardBackground", "music", "musicCover"]) {
       const file = await getMedia(key);
       media[key] = file ? await blobToDataURL(file) : null;
     }
@@ -2027,7 +2206,7 @@ async function importProfileBackup(event) {
     if (/\b(owner|dono|admin|administrator|dev|developer|staff|moderator)\b/i.test(String(profile.cargo || ""))) profile.cargo = "";
     profile.insignias = [...new Set(profile.insignias.map(normalizeBadge).filter((badge) => badge && !isBlockedBadge(badge)))];
 
-    for (const key of ["avatar", "banner", "background", "cardBackground", "music"]) {
+    for (const key of ["avatar", "banner", "background", "cardBackground", "music", "musicCover"]) {
       const value = backup.media?.[key];
       if (typeof value === "string" && value.startsWith("data:")) {
         await saveMedia(key, dataURLToBlob(value));
@@ -2041,7 +2220,14 @@ async function importProfileBackup(event) {
     revokeURL(backgroundURL);
     revokeURL(cardBackgroundURL);
     revokeURL(musicURL);
-    avatarURL = bannerURL = backgroundURL = cardBackgroundURL = musicURL = null;
+    revokeURL(musicCoverURL);
+    avatarURL = bannerURL = backgroundURL = cardBackgroundURL = musicURL = musicCoverURL = null;
+    currentMusicFile = null;
+    currentMusicCoverFile = null;
+    musicMediaType = "audio";
+    $("profileVideo").pause();
+    $("profileVideo").removeAttribute("src");
+    $("profileVideo").load();
     saveProfile();
     await restoreMedia();
     $("profileAudio").volume = (profile.volume || 0) / 100;
@@ -2102,12 +2288,15 @@ function setupEvents() {
   $("backgroundUpload").addEventListener("change", uploadBackground);
   $("cardBackgroundUpload").addEventListener("change", uploadCardBackground);
   $("musicUpload").addEventListener("change", uploadMusic);
+  $("musicVideoUpload").addEventListener("change", uploadMusicVideo);
+  $("musicCoverUpload").addEventListener("change", uploadMusicCover);
 
   $("removeAvatar").addEventListener("click", removeAvatar);
   $("removeBanner").addEventListener("click", removeBanner);
   $("removeBackground").addEventListener("click", removeBackground);
   $("removeCardBackground").addEventListener("click", removeCardBackground);
   $("removeMusic").addEventListener("click", removeMusic);
+  $("removeMusicCover").addEventListener("click", removeMusicCover);
 
   $("animateMedia").addEventListener("change", (event) => {
     setMediaAnimation(event.target.checked);
@@ -2192,11 +2381,20 @@ function setupEvents() {
   });
 
   $("musicToggle").addEventListener("click", toggleMusic);
-  $("profileAudio").addEventListener("play", () => { $("musicToggle").textContent = "Ⅱ"; });
-  $("profileAudio").addEventListener("pause", () => { $("musicToggle").textContent = "▶"; });
-  $("profileAudio").addEventListener("ended", () => { $("musicToggle").textContent = "▶"; });
   $("previewMusic").addEventListener("click", toggleMusic);
   $("downloadMusic").addEventListener("click", downloadOriginalMusic);
+  $("dockMusic").addEventListener("click", () => {
+    setMusicPlayerPosition(!$("profileMusic").classList.contains("is-docked"));
+  });
+
+  [$("profileAudio"), $("profileVideo")].forEach((media) => {
+    ["play", "pause", "ended", "loadedmetadata", "durationchange", "timeupdate"].forEach((eventName) => {
+      media.addEventListener(eventName, () => {
+        updateMusicButtons();
+        updateMusicTimeline();
+      });
+    });
+  });
 
   $("musicVolume").addEventListener("input", (event) => {
     const value = Number(event.target.value);
@@ -2204,6 +2402,7 @@ function setupEvents() {
     $("musicVolumeValue").textContent = `${value}%`;
     profile.volume = value;
     $("profileAudio").volume = value / 100;
+    $("profileVideo").volume = value / 100;
     saveProfile();
   });
 
@@ -2261,6 +2460,7 @@ async function init() {
   }
 
   $("profileAudio").volume = profile.volume / 100;
+  $("profileVideo").volume = profile.volume / 100;
   $("musicVolume").value = profile.volume;
   $("musicVolumeValue").textContent = `${profile.volume}%`;
 
@@ -2273,7 +2473,7 @@ async function init() {
 
 document.addEventListener("visibilitychange", applyMediaPlayback);
 document.addEventListener("pagehide", () => {
-  ["avatarVideo", "bannerVideo", "backgroundVideo", "cardBackgroundVideo"].forEach((id) => $(id)?.pause());
+  ["avatarVideo", "bannerVideo", "backgroundVideo", "cardBackgroundVideo", "profileAudio", "profileVideo"].forEach((id) => $(id)?.pause());
 });
 document.addEventListener("pageshow", applyMediaPlayback);
 document.addEventListener("DOMContentLoaded", init);
